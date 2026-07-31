@@ -1594,8 +1594,14 @@ function licCompute(values){
   const valorCompra = licParseNum(values["Valor Compra"]);
   const frete = licParseNum(values["FRETE"]);
   const imposto = totalReceber * 0.07;
-  const caixaAdm = totalReceber * 0.005;
-  const lucro = totalReceber - valorCompra - imposto - frete - caixaAdm;
+  const caixaAdmAuto = totalReceber * 0.005; // sugestão automática (0,5% do valor a receber)
+  const caixaAdmRaw = values["CAIXA ADM"];
+  const caixaAdmPreenchido = caixaAdmRaw !== undefined && caixaAdmRaw !== null && caixaAdmRaw.toString().trim() !== "";
+  // Se o campo estiver preenchido (seja o valor sugerido ou editado), mantém a lógica
+  // de sempre e desconta esse valor do lucro. Se for apagado, refaz o cálculo dos
+  // demais campos sem descontar Caixa Adm (considerado 0 nesse caso).
+  const caixaAdmUsado = caixaAdmPreenchido ? licParseNum(caixaAdmRaw) : 0;
+  const lucro = totalReceber - valorCompra - imposto - frete - caixaAdmUsado;
   const pct = valorCompra !== 0 ? (lucro/valorCompra) : 0;
   const cra = lucro * 0.225;
   const cbva = lucro * 0.225;
@@ -1606,7 +1612,7 @@ function licCompute(values){
     const d = new Date(values["Data da Entrega"]+"T00:00:00");
     if(!isNaN(d.getTime())){ d.setDate(d.getDate()+30); dataPrev = d.toISOString().slice(0,10); }
   }
-  return {imposto, caixaAdm, lucro, pct, cra, cbva, rlv, lbv, dataPrev};
+  return {imposto, caixaAdm: caixaAdmAuto, lucro, pct, cra, cbva, rlv, lbv, dataPrev};
 }
 function licOpenForm(existingIndex){
   const existing = existingIndex !== undefined && existingIndex !== null ? licData[existingIndex] : null;
@@ -1666,6 +1672,17 @@ function licOpenForm(existingIndex){
         if(LIC_EXCLUDED_FIELDS.includes(col.key) || LIC_CALC_FIELDS.includes(col.key)) return;
         if(values[col.key] !== undefined) row[col.key] = values[col.key];
       });
+      // recalcula os campos derivados com base no valor final de Caixa Adm
+      // (preenchido = desconta do lucro; apagado = refaz sem descontar)
+      const cFinal = licCompute(values);
+      row["IMPOSTO"] = cFinal.imposto;
+      row["LUCRO a Receber"] = cFinal.lucro;
+      row["% de LUCRO"] = cFinal.pct;
+      row["Data Prevista de Pagamento"] = cFinal.dataPrev || row["Data Prevista de Pagamento"] || "";
+      row["Lucro - CRA"] = cFinal.cra;
+      row["Lucro - CBVA"] = cFinal.cbva;
+      row["Lucro - RLV"] = cFinal.rlv;
+      row["Lucro LBV"] = cFinal.lbv;
       const payload = licToDbPayload(row);
       let error;
       if(existing){
