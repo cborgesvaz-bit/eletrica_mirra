@@ -1414,7 +1414,8 @@ function licToDbPayload(row){
     let v = row[col.key];
     if(col.key === "CAIXA ADM"){
       // único campo que pode ficar realmente em branco (null) em vez de virar 0,00
-      v = (v===""||v===null||v===undefined) ? null : licParseNum(v);
+      const vTrim = (v===null||v===undefined) ? "" : v.toString().trim();
+      v = vTrim === "" ? null : licParseNum(v);
     } else if(col.type==="currency" || col.type==="currency-signed" || col.type==="percent"){
       v = licParseNum(v);
     } else if(v === "" || v === undefined){
