@@ -567,8 +567,8 @@
     <div class="toolbar">
       <select id="mensal-year-filter"><option value="">Todos os anos</option></select>
       <select id="mensal-field-filter">
+        <option value="Data de Pagamento" selected>Agrupar por Data de Pagamento</option>
         <option value="Data NF">Agrupar por Data NF</option>
-        <option value="Data de Pagamento">Agrupar por Data de Pagamento</option>
       </select>
     </div>
     <div class="month-grid" id="mensal-grid"></div>
@@ -1412,9 +1412,11 @@ function licToDbPayload(row){
   LIC_COLUMNS.forEach(col=>{
     const dbKey = LIC_COLUMN_DB_MAP[col.key];
     let v = row[col.key];
-    if(col.type==="currency" || col.type==="currency-signed" || col.type==="percent"){
-      // campo vazio permanece em branco (null) em vez de virar 0,00 automaticamente
+    if(col.key === "CAIXA ADM"){
+      // único campo que pode ficar realmente em branco (null) em vez de virar 0,00
       v = (v===""||v===null||v===undefined) ? null : licParseNum(v);
+    } else if(col.type==="currency" || col.type==="currency-signed" || col.type==="percent"){
+      v = licParseNum(v);
     } else if(v === "" || v === undefined){
       v = null;
     }
@@ -1716,7 +1718,7 @@ document.getElementById("lic-export").addEventListener("click", licExportCSV);
 /* ============ MENSAL (auto agregado a partir de Licitações) ============ */
 function mensalPopulateYearFilter(){
   const sel = document.getElementById("mensal-year-filter");
-  const dateField = document.getElementById("mensal-field-filter")?.value || "Data NF";
+  const dateField = document.getElementById("mensal-field-filter")?.value || "Data de Pagamento";
   const years = new Set();
   licData.forEach(r=>{
     const d = r[dateField];
@@ -1729,7 +1731,7 @@ function mensalPopulateYearFilter(){
 function renderMensal(){
   const grid = document.getElementById("mensal-grid");
   const yearFilter = document.getElementById("mensal-year-filter").value;
-  const dateField = document.getElementById("mensal-field-filter")?.value || "Data NF";
+  const dateField = document.getElementById("mensal-field-filter")?.value || "Data de Pagamento";
   const byMonth = {};
   licData.forEach(r=>{
     const d = r[dateField];
