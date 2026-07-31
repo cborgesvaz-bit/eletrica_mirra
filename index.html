@@ -1753,13 +1753,17 @@ function licOpenForm(existingIndex){
       row["Lucro - RLV"] = cFinal.rlv;
       row["Lucro LBV"] = cFinal.lbv;
       const payload = licToDbPayload(row);
-      let error;
+      let error, data;
       if(existing){
-        ({error} = await sb.from("licitacoes").update(payload).eq("id", existing.id));
+        ({error, data} = await sb.from("licitacoes").update(payload).eq("id", existing.id).select());
       } else {
-        ({error} = await sb.from("licitacoes").insert(payload));
+        ({error, data} = await sb.from("licitacoes").insert(payload).select());
       }
       if(error){ alert("Erro ao salvar no Supabase: "+error.message); return false; }
+      if(existing && (!data || data.length===0)){
+        alert("Atenção: o Supabase não retornou erro, mas nenhuma linha foi de fato alterada. Isso geralmente indica que a política de segurança (RLS) da tabela 'licitacoes' está bloqueando o UPDATE para o seu usuário. Verifique as políticas de RLS dessa tabela no painel do Supabase.");
+        return false;
+      }
       await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
       showSaveStatus("Salvo às " + new Date().toLocaleTimeString("pt-BR"));
       return true;
