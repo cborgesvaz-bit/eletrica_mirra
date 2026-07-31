@@ -1327,7 +1327,7 @@ function openModal({title, icon, fields, onSave, onInput}){
       return v;
     };
     const setDisplay = (key,val)=>{ const el = document.getElementById("modal-field-"+key); if(el) el.value = val; };
-    modalBody.addEventListener("input", ()=> modalOnInput(getValues(), setDisplay));
+    modalBody.addEventListener("input", (e)=> modalOnInput(getValues(), setDisplay, e.target?.dataset?.key));
     modalOnInput(getValues(), setDisplay);
   }
   modalOverlay.classList.add("active");
@@ -1652,13 +1652,23 @@ function licOpenForm(existingIndex){
     }
     fields.push(f);
   });
+  let caixaAdmManual = false; // vira true assim que o usuário editar/apagar o campo manualmente
+  let caixaAdmFirstRun = true; // evita sobrescrever o valor inicial já definido ao abrir o formulário
   openModal({
     title: existing ? "Editar Registro de Licitação" : "Novo Registro de Licitação",
     icon: `<path d="M9 12h6M9 16h6M9 8h6M5 21V5a2 2 0 0 1 2-2h7l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"/>`,
     fields,
-    onInput: (values, setDisplay)=>{
+    onInput: (values, setDisplay, changedKey)=>{
       const c = licCompute(values);
       setDisplay("IMPOSTO_display", fmtCurrency(c.imposto));
+      if(changedKey === "CAIXA ADM"){
+        caixaAdmManual = true;
+      } else if(!caixaAdmManual && !caixaAdmFirstRun){
+        // recalcula a sugestão de Caixa Adm (0,5% do valor a receber) sempre que
+        // outro campo mudar, enquanto o usuário não tiver editado/apagado o campo
+        setDisplay("CAIXA ADM", c.caixaAdm ? fmtCurrency(c.caixaAdm) : "");
+      }
+      caixaAdmFirstRun = false;
       setDisplay("LUCRO a Receber_display", fmtCurrency(c.lucro));
       setDisplay("% de LUCRO_display", fmtPercent(c.pct));
       setDisplay("Data Prevista de Pagamento_display", fmtDateBR(c.dataPrev));
