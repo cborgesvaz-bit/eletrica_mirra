@@ -324,6 +324,34 @@
   }
   .modal-body .field{display:flex;flex-direction:column;gap:6px;}
   .modal-body .field.full{grid-column:1/-1;}
+  .modal-body .field.autocomplete-wrap{position:relative;}
+  .autocomplete-list{
+    position:absolute;
+    top:calc(100% + 4px);
+    left:0;right:0;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    box-shadow:0 10px 28px rgba(13,36,56,0.16);
+    max-height:220px;
+    overflow-y:auto;
+    z-index:200;
+  }
+  .autocomplete-item{
+    padding:9px 12px;
+    font-size:13px;
+    color:var(--text);
+    cursor:pointer;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .autocomplete-item:hover, .autocomplete-item.active{
+    background:rgba(245,166,35,0.14);
+    color:var(--navy);
+  }
+  .autocomplete-item + .autocomplete-item{border-top:1px solid var(--line);}
+  .autocomplete-empty{padding:10px 12px;font-size:12.5px;color:var(--muted);}
   .modal-body label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
   .modal-body input, .modal-body select, .modal-body textarea{
     border:1px solid var(--line);
@@ -501,7 +529,7 @@
         <input type="text" id="lic-search" placeholder="Buscar por cliente, empenho, NF...">
       </div>
       <select id="lic-status-filter"><option value="">Todos os status</option></select>
-      <select id="lic-month-filter"><option value="">Todos os meses</option></select>
+      <select id="lic-month-filter"><option value="">Todos os meses (Pagamento)</option></select>
       <button class="btn secondary" id="lic-add">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Nova linha
@@ -566,10 +594,6 @@
   <section id="view-mensal" class="view">
     <div class="toolbar">
       <select id="mensal-year-filter"><option value="">Todos os anos</option></select>
-      <select id="mensal-field-filter">
-        <option value="Data de Pagamento" selected>Agrupar por Data de Pagamento</option>
-        <option value="Data NF">Agrupar por Data NF</option>
-      </select>
     </div>
     <div class="month-grid" id="mensal-grid"></div>
   </section>
@@ -1278,9 +1302,6 @@ function openModal({title, icon, fields, onSave, onInput}){
     input.id = "modal-field-"+f.key;
     input.dataset.key = f.key;
     if(f.value !== undefined && f.type !== "checkbox") input.value = f.value;
-    if(f.datalist){
-      input.setAttribute("list", f.datalist);
-    }
     if(f.readonly){
       input.readOnly = true;
       input.tabIndex = -1;
@@ -1289,6 +1310,41 @@ function openModal({title, icon, fields, onSave, onInput}){
       input.style.fontWeight = "700";
     }
     wrap.appendChild(input);
+    if(f.datalist){
+      wrap.classList.add("autocomplete-wrap");
+      input.autocomplete = "off";
+      const listEl = document.createElement("div");
+      listEl.className = "autocomplete-list";
+      listEl.style.display = "none";
+      wrap.appendChild(listEl);
+      const getSource = ()=>{
+        if(f.quickAdd === "cliente") return clientesData.map(c=>c.nome);
+        if(f.quickAdd === "fornecedor") return fornecedoresData.map(c=>c.nome);
+        if(f.quickAdd === "produto") return produtosData.map(c=>c.nome);
+        return [];
+      };
+      const renderAutoList = ()=>{
+        const term = input.value.trim().toLowerCase();
+        const items = getSource().filter(n=>n && (!term || n.toLowerCase().includes(term))).slice(0,60);
+        if(items.length === 0){
+          listEl.innerHTML = `<div class="autocomplete-empty">Nenhum cadastro encontrado</div>`;
+        } else {
+          listEl.innerHTML = items.map(n=>`<div class="autocomplete-item">${n}</div>`).join("");
+        }
+        listEl.style.display = "block";
+      };
+      input.addEventListener("focus", renderAutoList);
+      input.addEventListener("input", renderAutoList);
+      input.addEventListener("blur", ()=>{ listEl.style.display = "none"; });
+      listEl.addEventListener("mousedown", (e)=>{
+        e.preventDefault();
+        const item = e.target.closest(".autocomplete-item");
+        if(!item) return;
+        input.value = item.textContent;
+        listEl.style.display = "none";
+        input.dispatchEvent(new Event("input", {bubbles:true}));
+      });
+    }
     if(f.quickAdd && quickAddHandlers[f.quickAdd]){
       const entityLabel = f.quickAdd === "cliente" ? "cliente" : f.quickAdd === "fornecedor" ? "fornecedor" : "produto";
       const qa = document.createElement("div");
@@ -1473,14 +1529,14 @@ function licPopulateFilters(){
   const monthSel = document.getElementById("lic-month-filter");
   const months = new Set();
   licData.forEach(r=>{
-    const d = r["Data NF"];
+    const d = r["Data de Pagamento"];
     if(d && /^\d{4}-\d{2}/.test(d)) months.add(d.substring(0,7));
   });
   const currentStatus = statusSel.value;
   statusSel.innerHTML = '<option value="">Todos os status</option>' + LIC_STATUS_OPTIONS.map(s=>`<option value="${s}">${s}</option>`).join("");
   if(LIC_STATUS_OPTIONS.includes(currentStatus)) statusSel.value = currentStatus;
   const MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  monthSel.innerHTML = '<option value="">Todos os meses</option>' + [...months].sort().map(m=>{
+  monthSel.innerHTML = '<option value="">Todos os meses (Pagamento)</option>' + [...months].sort().map(m=>{
     const [y,mm] = m.split("-");
     const label = MESES_PT[parseInt(mm,10)-1] + "/" + y;
     return `<option value="${m}">${label}</option>`;
@@ -1492,7 +1548,7 @@ function licFilteredSorted(){
   const month = document.getElementById("lic-month-filter").value;
   let rows = licData.filter(r=>{
     if(status && statusClass(r["Status de PGTO"]) !== statusClass(status)) return false;
-    if(month && !(r["Data NF"] && r["Data NF"].startsWith(month))) return false;
+    if(month && !(r["Data de Pagamento"] && r["Data de Pagamento"].startsWith(month))) return false;
     if(search && !Object.values(r).join(" ").toLowerCase().includes(search)) return false;
     return true;
   });
@@ -1729,7 +1785,7 @@ document.getElementById("lic-export").addEventListener("click", licExportCSV);
 /* ============ MENSAL (auto agregado a partir de Licitações) ============ */
 function mensalPopulateYearFilter(){
   const sel = document.getElementById("mensal-year-filter");
-  const dateField = document.getElementById("mensal-field-filter")?.value || "Data de Pagamento";
+  const dateField = "Data de Pagamento";
   const years = new Set();
   licData.forEach(r=>{
     const d = r[dateField];
@@ -1742,7 +1798,7 @@ function mensalPopulateYearFilter(){
 function renderMensal(){
   const grid = document.getElementById("mensal-grid");
   const yearFilter = document.getElementById("mensal-year-filter").value;
-  const dateField = document.getElementById("mensal-field-filter")?.value || "Data de Pagamento";
+  const dateField = "Data de Pagamento";
   const byMonth = {};
   licData.forEach(r=>{
     const d = r[dateField];
@@ -1778,7 +1834,6 @@ function renderMensal(){
   }).join("");
 }
 document.getElementById("mensal-year-filter").addEventListener("change", renderMensal);
-document.getElementById("mensal-field-filter").addEventListener("change", ()=>{ mensalPopulateYearFilter(); renderMensal(); });
 
 /* (módulo genérico makeCrud removido — Contas a Pagar agora tem módulo dedicado ao Supabase, ver mais abaixo) */
 
