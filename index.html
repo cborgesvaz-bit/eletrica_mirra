@@ -566,6 +566,10 @@
   <section id="view-mensal" class="view">
     <div class="toolbar">
       <select id="mensal-year-filter"><option value="">Todos os anos</option></select>
+      <select id="mensal-field-filter">
+        <option value="Data NF">Agrupar por Data NF</option>
+        <option value="Data de Pagamento">Agrupar por Data de Pagamento</option>
+      </select>
     </div>
     <div class="month-grid" id="mensal-grid"></div>
   </section>
@@ -917,16 +921,33 @@ function usuariosRenderKpis(){
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div><div><div class="label">Admins</div><div class="value">${admins}</div></div></div>
   `;
 }
+// Cliente auxiliar, usado só para criar novos logins sem afetar a sessão do admin atual
+const sbAux = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
+
 document.getElementById("usuarios-add")?.addEventListener("click", async ()=>{
-  const email = prompt("E-mail do novo usuário (ele receberá um convite por e-mail para criar a senha):");
+  const email = prompt("E-mail do novo usuário:");
   if(!email) return;
-  const { error } = await sb.auth.admin?.inviteUserByEmail
-    ? sb.auth.admin.inviteUserByEmail(email)
-    : { error: { message: "not-supported" } };
+  const password = prompt("Defina uma senha inicial para esse usuário (mínimo 6 caracteres):");
+  if(!password) return;
+  if(password.length < 6){ alert("A senha precisa ter pelo menos 6 caracteres."); return; }
+  const roleChoice = confirm("Clique OK para criar como Admin, ou Cancelar para criar como Operador.");
+  const role = roleChoice ? "admin" : "operador";
+
+  const { data, error } = await sbAux.auth.signUp({ email, password });
   if(error){
-    alert("Não é possível convidar usuários diretamente pelo app (isso exige a Service Role Key, que não pode ficar no navegador).\n\nPara criar um novo acesso, vá ao painel do Supabase → Authentication → Users → Add User, com o e-mail e senha do novo usuário. Assim que ele fizer login pela primeira vez aqui no sistema, o perfil dele aparecerá automaticamente nesta lista como 'Operador', e você poderá promovê-lo a Admin se quiser.");
+    alert("Erro ao criar usuário: " + error.message);
     return;
   }
+  const newUser = data?.user;
+  if(newUser){
+    // cria o perfil já com o papel escolhido (evita depender do primeiro login dele)
+    const { error: profErr } = await sb.from("profiles")
+      .upsert({ id: newUser.id, email: newUser.email, role }, { onConflict: "id" });
+    if(profErr) console.error(profErr);
+  }
+  alert("Usuário criado! Se a confirmação de e-mail estiver ativada no Supabase, ele precisará confirmar o e-mail antes de logar. Compartilhe o e-mail e a senha com a pessoa.");
   await usuariosLoad(); usuariosRender(""); usuariosRenderKpis();
 });
 document.getElementById("usuarios-search")?.addEventListener("input", e=>usuariosRender(e.target.value));
@@ -1392,7 +1413,8 @@ function licToDbPayload(row){
     const dbKey = LIC_COLUMN_DB_MAP[col.key];
     let v = row[col.key];
     if(col.type==="currency" || col.type==="currency-signed" || col.type==="percent"){
-      v = licParseNum(v);
+      // campo vazio permanece em branco (null) em vez de virar 0,00 automaticamente
+      v = (v===""||v===null||v===undefined) ? null : licParseNum(v);
     } else if(v === "" || v === undefined){
       v = null;
     }
@@ -1559,7 +1581,7 @@ function licRenderKpis(){
   `;
 }
 const LIC_EXCLUDED_FIELDS = ["Nº Pregão","Nº Pedido","Data da Venda","PRODUTO"];
-const LIC_CALC_FIELDS = ["IMPOSTO","CAIXA ADM","LUCRO a Receber","% de LUCRO","Data Prevista de Pagamento","Lucro - CRA","Lucro - CBVA","Lucro - RLV","Lucro LBV"];
+const LIC_CALC_FIELDS = ["IMPOSTO","LUCRO a Receber","% de LUCRO","Data Prevista de Pagamento","Lucro - CRA","Lucro - CBVA","Lucro - RLV","Lucro LBV"];
 const LIC_DATE_FIELDS = ["Data NF","Data Envio","Data da Entrega","Data de Pagamento"];
 
 function licParseNum(v){
@@ -1615,6 +1637,11 @@ function licOpenForm(existingIndex){
     if(col.key === "Cliente"){ f.datalist = "clientes-datalist"; f.quickAdd = "cliente"; f.full = true; }
     if(col.key === "OBSERVACAO_GERAL" || col.key === "FRETE_obs"){ f.type = "textarea"; f.full = true; }
     if(col.type === "currency"){ f.placeholder = "0,00"; }
+    if(col.key === "CAIXA ADM" && !existing){
+      // sugestão automática (0,5% do valor a receber); o campo fica aberto para edição,
+      // podendo ser alterado ou deixado em branco caso não se queira valor aqui
+      f.value = c0.caixaAdm ? fmtCurrency(c0.caixaAdm) : "";
+    }
     fields.push(f);
   });
   openModal({
@@ -1624,7 +1651,6 @@ function licOpenForm(existingIndex){
     onInput: (values, setDisplay)=>{
       const c = licCompute(values);
       setDisplay("IMPOSTO_display", fmtCurrency(c.imposto));
-      setDisplay("CAIXA ADM_display", fmtCurrency(c.caixaAdm));
       setDisplay("LUCRO a Receber_display", fmtCurrency(c.lucro));
       setDisplay("% de LUCRO_display", fmtPercent(c.pct));
       setDisplay("Data Prevista de Pagamento_display", fmtDateBR(c.dataPrev));
@@ -1673,9 +1699,10 @@ document.getElementById("lic-export").addEventListener("click", licExportCSV);
 /* ============ MENSAL (auto agregado a partir de Licitações) ============ */
 function mensalPopulateYearFilter(){
   const sel = document.getElementById("mensal-year-filter");
+  const dateField = document.getElementById("mensal-field-filter")?.value || "Data NF";
   const years = new Set();
   licData.forEach(r=>{
-    const d = r["Data NF"];
+    const d = r[dateField];
     if(d && /^\d{4}-\d{2}/.test(d)) years.add(d.substring(0,4));
   });
   const current = sel.value;
@@ -1685,18 +1712,20 @@ function mensalPopulateYearFilter(){
 function renderMensal(){
   const grid = document.getElementById("mensal-grid");
   const yearFilter = document.getElementById("mensal-year-filter").value;
+  const dateField = document.getElementById("mensal-field-filter")?.value || "Data NF";
   const byMonth = {};
   licData.forEach(r=>{
-    const d = r["Data NF"];
+    const d = r[dateField];
     if(!d || !/^\d{4}-\d{2}/.test(d)) return;
     if(yearFilter && d.substring(0,4) !== yearFilter) return;
     const key = d.substring(0,7);
-    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, lucro:0, count:0, recebidos:0};
+    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, lucro:0, count:0, recebidos:0, pagos:0};
     byMonth[key].compra += parseFloat(r["Valor Compra"])||0;
     byMonth[key].receber += parseFloat(r["Valor a Receber - TOTAL"])||0;
     byMonth[key].lucro += parseFloat(r["LUCRO a Receber"])||0;
     byMonth[key].count += 1;
     if(statusClass(r["Status de PGTO"])==="recebido") byMonth[key].recebidos += 1;
+    if(r["Data de Pagamento"]) byMonth[key].pagos += 1;
   });
   const months = Object.keys(byMonth).sort().reverse();
   if(months.length===0){
@@ -1711,6 +1740,7 @@ function renderMensal(){
       <h3><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" stroke="var(--yellow)"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${monthNames[mm]||mm} ${y}</h3>
       <div class="row"><span>Registros</span><b>${d.count}</b></div>
       <div class="row"><span>Recebidos</span><b>${d.recebidos}/${d.count}</b></div>
+      <div class="row"><span>Com Data de Pagamento</span><b>${d.pagos}/${d.count}</b></div>
       <div class="row"><span>Valor Compra</span><b>${fmtCurrency(d.compra)}</b></div>
       <div class="row"><span>Valor a Receber</span><b>${fmtCurrency(d.receber)}</b></div>
       <div class="row"><span>Lucro</span><b style="color:${d.lucro<0?'var(--neg)':'var(--pos)'}">${fmtCurrency(d.lucro)}</b></div>
@@ -1718,6 +1748,7 @@ function renderMensal(){
   }).join("");
 }
 document.getElementById("mensal-year-filter").addEventListener("change", renderMensal);
+document.getElementById("mensal-field-filter").addEventListener("change", ()=>{ mensalPopulateYearFilter(); renderMensal(); });
 
 /* (módulo genérico makeCrud removido — Contas a Pagar agora tem módulo dedicado ao Supabase, ver mais abaixo) */
 
