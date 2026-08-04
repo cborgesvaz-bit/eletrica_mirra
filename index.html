@@ -1265,6 +1265,16 @@ const modalTitle = document.getElementById("modal-title");
 const modalTitleWrap = document.getElementById("modal-title-wrap");
 let modalOnSave = null;
 let modalOnInput = null;
+let modalGetValues = null;
+let modalSetDisplay = null;
+// Listener único e permanente no modalBody: evita empilhar um addEventListener
+// a cada abertura de formulário (o que fazia handlers de sessões antigas
+// reescreverem campos, ex.: Caixa Adm "voltando" sozinho após ser apagado).
+modalBody.addEventListener("input", (e)=>{
+  if(modalOnInput && modalGetValues && modalSetDisplay){
+    modalOnInput(modalGetValues(), modalSetDisplay, e.target?.dataset?.key);
+  }
+});
 const quickAddHandlers = { cliente: addClienteQuick, fornecedor: addFornecedorQuick, produto: addProdutoQuick };
 
 function openModal({title, icon, fields, onSave, onInput}){
@@ -1383,7 +1393,8 @@ function openModal({title, icon, fields, onSave, onInput}){
       return v;
     };
     const setDisplay = (key,val)=>{ const el = document.getElementById("modal-field-"+key); if(el) el.value = val; };
-    modalBody.addEventListener("input", (e)=> modalOnInput(getValues(), setDisplay, e.target?.dataset?.key));
+    modalGetValues = getValues;
+    modalSetDisplay = setDisplay;
     modalOnInput(getValues(), setDisplay);
   }
   modalOverlay.classList.add("active");
@@ -1393,6 +1404,8 @@ function closeModal(){
   modalOverlay.classList.remove("active");
   modalOnSave = null;
   modalOnInput = null;
+  modalGetValues = null;
+  modalSetDisplay = null;
 }
 document.getElementById("modal-save-btn").addEventListener("click", ()=>{ if(modalOnSave) modalOnSave(); });
 document.getElementById("modal-cancel-btn").addEventListener("click", closeModal);
