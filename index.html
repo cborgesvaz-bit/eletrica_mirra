@@ -380,6 +380,44 @@
   }
   .client-quickadd button svg{width:13px;height:13px;stroke:var(--yellow);}
 
+  /* MODAL DE AVISO/ERRO (substitui showAppAlert() nativo) */
+  .app-alert-overlay{
+    display:none;
+    position:fixed;inset:0;
+    background:rgba(13,36,56,0.55);
+    z-index:200; /* acima do modal genérico, para poder aparecer em cima de um formulário aberto */
+    align-items:center;justify-content:center;
+    padding:20px;
+  }
+  .app-alert-overlay.active{display:flex;}
+  .app-alert-card{
+    background:var(--panel);
+    border-radius:16px;
+    width:100%;
+    max-width:420px;
+    padding:28px 26px 22px;
+    text-align:center;
+    box-shadow:0 20px 50px rgba(13,36,56,0.3);
+    animation:modalIn .18s ease-out;
+  }
+  .app-alert-icon{
+    width:52px;height:52px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    margin:0 auto 16px;
+  }
+  .app-alert-icon svg{width:26px;height:26px;stroke-width:2;}
+  .app-alert-icon.error{background:rgba(220,38,38,0.12);}
+  .app-alert-icon.error svg{stroke:#dc2626;}
+  .app-alert-icon.warning{background:rgba(245,166,35,0.16);}
+  .app-alert-icon.warning svg{stroke:#b9740e;}
+  .app-alert-icon.success{background:rgba(22,163,74,0.14);}
+  .app-alert-icon.success svg{stroke:#16a34a;}
+  .app-alert-icon.info{background:rgba(37,99,235,0.12);}
+  .app-alert-icon.info svg{stroke:#2563eb;}
+  .app-alert-title{font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px;}
+  .app-alert-message{font-size:13.5px;color:var(--text);line-height:1.5;margin-bottom:22px;white-space:pre-line;}
+  .app-alert-card .btn{width:100%;justify-content:center;}
+
   @media (max-width:560px){
     .modal-body{grid-template-columns:1fr;}
   }
@@ -758,6 +796,16 @@
   </div>
 </div>
 
+<!-- MODAL DE AVISO/ERRO (substitui showAppAlert() nativo) -->
+<div class="app-alert-overlay" id="app-alert-overlay">
+  <div class="app-alert-card">
+    <div class="app-alert-icon" id="app-alert-icon"></div>
+    <div class="app-alert-title" id="app-alert-title">Aviso</div>
+    <div class="app-alert-message" id="app-alert-message"></div>
+    <button class="btn" id="app-alert-ok-btn">Ok, entendi</button>
+  </div>
+</div>
+
 <footer>
   <span id="footer-count">Elétrica Mirra © 2026</span>
   <span class="save-indicator"><span class="dot"></span> <span id="save-status">Conectando ao Supabase...</span></span>
@@ -909,7 +957,7 @@ function usuariosRender(searchTerm){
     });
     sel.addEventListener("change", async ()=>{
       const { error } = await sb.from("profiles").update({ role: sel.value }).eq("id", u.id);
-      if(error){ alert("Erro ao atualizar perfil: "+error.message); return; }
+      if(error){ showAppAlert("Erro ao atualizar perfil: "+error.message); return; }
       u.role = sel.value;
       if(u.id === currentUser?.id){ currentProfile.role = sel.value; applyRoleToUI(); }
     });
@@ -925,7 +973,7 @@ function usuariosRender(searchTerm){
       delBtn.addEventListener("click", async ()=>{
         if(confirm(`Remover o acesso de ${u.email}? Isso apaga o perfil dele (o login continuará existindo até você removê-lo também no painel do Supabase, em Authentication).`)){
           const { error } = await sb.from("profiles").delete().eq("id", u.id);
-          if(error){ alert("Erro ao remover: "+error.message); return; }
+          if(error){ showAppAlert("Erro ao remover: "+error.message); return; }
           await usuariosLoad(); usuariosRender(""); usuariosRenderKpis();
         }
       });
@@ -955,13 +1003,13 @@ document.getElementById("usuarios-add")?.addEventListener("click", async ()=>{
   if(!email) return;
   const password = prompt("Defina uma senha inicial para esse usuário (mínimo 6 caracteres):");
   if(!password) return;
-  if(password.length < 6){ alert("A senha precisa ter pelo menos 6 caracteres."); return; }
+  if(password.length < 6){ showAppAlert("A senha precisa ter pelo menos 6 caracteres."); return; }
   const roleChoice = confirm("Clique OK para criar como Admin, ou Cancelar para criar como Operador.");
   const role = roleChoice ? "admin" : "operador";
 
   const { data, error } = await sbAux.auth.signUp({ email, password });
   if(error){
-    alert("Erro ao criar usuário: " + error.message);
+    showAppAlert("Erro ao criar usuário: " + error.message);
     return;
   }
   const newUser = data?.user;
@@ -971,7 +1019,7 @@ document.getElementById("usuarios-add")?.addEventListener("click", async ()=>{
       .upsert({ id: newUser.id, email: newUser.email, role }, { onConflict: "id" });
     if(profErr) console.error(profErr);
   }
-  alert("Usuário criado! Se a confirmação de e-mail estiver ativada no Supabase, ele precisará confirmar o e-mail antes de logar. Compartilhe o e-mail e a senha com a pessoa.");
+  showAppAlert("Usuário criado! Se a confirmação de e-mail estiver ativada no Supabase, ele precisará confirmar o e-mail antes de logar. Compartilhe o e-mail e a senha com a pessoa.");
   await usuariosLoad(); usuariosRender(""); usuariosRenderKpis();
 });
 document.getElementById("usuarios-search")?.addEventListener("input", e=>usuariosRender(e.target.value));
@@ -998,7 +1046,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     if(btn.dataset.view === "contas"){ renderContasKpis(); checkContasAlerts(); }
     if(btn.dataset.view === "usuarios"){
       if(currentProfile?.role !== "admin"){
-        alert("Apenas administradores podem acessar a gestão de usuários.");
+        showAppAlert("Apenas administradores podem acessar a gestão de usuários.");
         return;
       }
       usuariosLoad().then(()=>{ usuariosRender(""); usuariosRenderKpis(); });
@@ -1012,6 +1060,11 @@ function fmtCurrency(v){
   const n = parseFloat(v);
   if(isNaN(n)) return "";
   return n.toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
+}
+function fmtNum2(v){
+  const n = parseFloat(v);
+  if(isNaN(n)) return "";
+  return n.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 function fmtPercent(v){
   const n = parseFloat(v);
@@ -1060,7 +1113,7 @@ function clientesRender(searchTerm){
       delBtn.addEventListener("click", async ()=>{
         if(confirm("Excluir este cliente?")){
           const { error } = await sb.from("clientes").delete().eq("id", c.id);
-          if(error){ alert("Erro ao excluir: "+error.message); return; }
+          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
           await clientesLoad(); clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
         }
       });
@@ -1092,9 +1145,9 @@ function addClienteQuick(prefillName){
       {key:"nome", label:"Nome de Cadastro", type:"text", full:true, value:prefillName||""},
     ],
     onSave: async (values)=>{
-      if(!values.nome.trim()){ alert("Informe o nome do cliente."); return false; }
+      if(!values.nome.trim()){ showAppAlert("Informe o nome do cliente."); return false; }
       const { error } = await sb.from("clientes").insert({nome:values.nome.trim()});
-      if(error){ alert("Erro ao salvar cliente: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar cliente: "+error.message); return false; }
       await clientesLoad(); clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
       return true;
     }
@@ -1135,7 +1188,7 @@ function fornecedoresRender(searchTerm){
       delBtn.addEventListener("click", async ()=>{
         if(confirm("Excluir este fornecedor?")){
           const { error } = await sb.from("fornecedores").delete().eq("id", f.id);
-          if(error){ alert("Erro ao excluir: "+error.message); return; }
+          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
           await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
         }
       });
@@ -1167,9 +1220,9 @@ function addFornecedorQuick(prefillName){
       {key:"nome", label:"Nome do Fornecedor", type:"text", full:true, value:prefillName||""},
     ],
     onSave: async (values)=>{
-      if(!values.nome.trim()){ alert("Informe o nome do fornecedor."); return false; }
+      if(!values.nome.trim()){ showAppAlert("Informe o nome do fornecedor."); return false; }
       const { error } = await sb.from("fornecedores").insert({nome:values.nome.trim()});
-      if(error){ alert("Erro ao salvar fornecedor: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar fornecedor: "+error.message); return false; }
       await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
       return true;
     }
@@ -1211,7 +1264,7 @@ function produtosRender(searchTerm){
       delBtn.addEventListener("click", async ()=>{
         if(confirm("Excluir este produto?")){
           const { error } = await sb.from("produtos").delete().eq("id", p.id);
-          if(error){ alert("Erro ao excluir: "+error.message); return; }
+          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
           await produtosLoad(); produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
         }
       });
@@ -1244,12 +1297,12 @@ function addProdutoQuick(prefillName){
       {key:"observacao", label:"Observação", type:"textarea", full:true},
     ],
     onSave: async (values)=>{
-      if(!values.nome.trim()){ alert("Informe o nome do produto."); return false; }
+      if(!values.nome.trim()){ showAppAlert("Informe o nome do produto."); return false; }
       const { error } = await sb.from("produtos").insert({
         nome: values.nome.trim(),
         observacao: values.observacao.trim()
       });
-      if(error){ alert("Erro ao salvar produto: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar produto: "+error.message); return false; }
       await produtosLoad(); produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
       return true;
     }
@@ -1257,6 +1310,43 @@ function addProdutoQuick(prefillName){
 }
 document.getElementById("produtos-add").addEventListener("click", ()=>addProdutoQuick(""));
 document.getElementById("produtos-search").addEventListener("input", e=>produtosRender(e.target.value));
+
+/* ============ MODAL DE AVISO/ERRO (substitui showAppAlert() nativo) ============ */
+const appAlertOverlay = document.getElementById("app-alert-overlay");
+const appAlertIcon = document.getElementById("app-alert-icon");
+const appAlertTitle = document.getElementById("app-alert-title");
+const appAlertMessage = document.getElementById("app-alert-message");
+const appAlertOkBtn = document.getElementById("app-alert-ok-btn");
+const APP_ALERT_ICONS = {
+  error: `<path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/>`,
+  warning: `<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/>`,
+  success: `<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>`,
+  info: `<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>`,
+};
+const APP_ALERT_TITLES = { error:"Erro", warning:"Atenção", success:"Sucesso", info:"Aviso" };
+// Detecta o tipo pela própria mensagem, para não precisar tocar em cada uma
+// das dezenas de chamadas existentes ao trocar showAppAlert(...) por showAppAlert(...).
+function appAlertDetectType(message){
+  const m = (message||"").toLowerCase();
+  if(m.startsWith("erro") || m.includes(" erro ao") || m.includes("erro ao ")) return "error";
+  if(m.startsWith("atenção") || m.includes("atenção")) return "warning";
+  if(m.includes("informe ")) return "warning";
+  if(m.includes("criado") || m.includes("sucesso")) return "success";
+  return "info";
+}
+function showAppAlert(message, type){
+  type = type || appAlertDetectType(message);
+  appAlertIcon.className = "app-alert-icon " + type;
+  appAlertIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">${APP_ALERT_ICONS[type]}</svg>`;
+  appAlertTitle.textContent = APP_ALERT_TITLES[type];
+  appAlertMessage.textContent = message;
+  appAlertOverlay.classList.add("active");
+  setTimeout(()=> appAlertOkBtn.focus(), 50);
+}
+function closeAppAlert(){ appAlertOverlay.classList.remove("active"); }
+appAlertOkBtn.addEventListener("click", closeAppAlert);
+appAlertOverlay.addEventListener("click", (e)=>{ if(e.target === appAlertOverlay) closeAppAlert(); });
+document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && appAlertOverlay.classList.contains("active")) closeAppAlert(); });
 
 /* ============ MODAL GENÉRICO ============ */
 const modalOverlay = document.getElementById("modal-overlay");
@@ -1380,7 +1470,7 @@ function openModal({title, icon, fields, onSave, onInput}){
       if(ok !== false) closeModal();
     } catch(err){
       console.error(err);
-      alert("Erro ao salvar: " + (err?.message || err));
+      showAppAlert("Erro ao salvar: " + (err?.message || err));
     } finally {
       saveBtn.disabled = false; saveBtn.style.opacity = "";
     }
@@ -1625,7 +1715,7 @@ function licRender(){
       e.stopPropagation();
       if(confirm("Excluir esta linha?")){
         const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
-        if(error){ alert("Erro ao excluir: "+error.message); return; }
+        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
       }
     });
@@ -1714,11 +1804,19 @@ function licOpenForm(existingIndex){
     if(LIC_DATE_FIELDS.includes(col.key)){ f.type = "date"; }
     if(col.key === "Cliente"){ f.datalist = "clientes-datalist"; f.quickAdd = "cliente"; f.full = true; }
     if(col.key === "OBSERVACAO_GERAL" || col.key === "FRETE_obs"){ f.type = "textarea"; f.full = true; }
-    if(col.type === "currency"){ f.placeholder = "0,00"; }
+    if(col.type === "currency"){
+      f.placeholder = "0,00";
+      if(existing){
+        // exibe sempre com 2 casas decimais (ex.: "99,00"), inclusive quando o
+        // valor gravado é zero — antes aparecia só "99" ou campo vazio
+        const raw = existing[col.key];
+        if(raw !== undefined && raw !== null && raw !== ""){ f.value = fmtNum2(raw); }
+      }
+    }
     if(col.key === "CAIXA ADM" && !existing){
       // sugestão automática (0,5% do valor a receber); o campo fica aberto para edição,
       // podendo ser alterado ou deixado em branco caso não se queira valor aqui
-      f.value = c0.caixaAdm ? fmtCurrency(c0.caixaAdm) : "";
+      f.value = c0.caixaAdm ? fmtNum2(c0.caixaAdm) : "";
     }
     fields.push(f);
   });
@@ -1748,7 +1846,7 @@ function licOpenForm(existingIndex){
       setDisplay("Lucro LBV_display", fmtCurrency(c.lbv));
     },
     onSave: async (values)=>{
-      if(!values["Empenho"] || !values["Empenho"].trim()){ alert("Informe o número do Empenho."); return false; }
+      if(!values["Empenho"] || !values["Empenho"].trim()){ showAppAlert("Informe o número do Empenho."); return false; }
       const row = Object.assign({}, existing || {});
       LIC_COLUMNS.forEach(col=>{
         if(LIC_EXCLUDED_FIELDS.includes(col.key) || LIC_CALC_FIELDS.includes(col.key)) return;
@@ -1772,9 +1870,9 @@ function licOpenForm(existingIndex){
       } else {
         ({error, data} = await sb.from("licitacoes").insert(payload).select());
       }
-      if(error){ alert("Erro ao salvar no Supabase: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
       if(existing && (!data || data.length===0)){
-        alert("Atenção: o Supabase não retornou erro, mas nenhuma linha foi de fato alterada. Isso geralmente indica que a política de segurança (RLS) da tabela 'licitacoes' está bloqueando o UPDATE para o seu usuário. Verifique as políticas de RLS dessa tabela no painel do Supabase.");
+        showAppAlert("Atenção: o Supabase não retornou erro, mas nenhuma linha foi de fato alterada. Isso geralmente indica que a política de segurança (RLS) da tabela 'licitacoes' está bloqueando o UPDATE para o seu usuário. Verifique as políticas de RLS dessa tabela no painel do Supabase.");
         return false;
       }
       await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
@@ -2011,7 +2109,7 @@ function pedidosRender(searchTerm){
       buyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Marcar comprado`;
       buyBtn.addEventListener("click", async ()=>{
         const { error } = await sb.from("pedidos").update({status:"Comprado", comprado:true}).eq("id", p.id);
-        if(error){ alert("Erro ao atualizar: "+error.message); return; }
+        if(error){ showAppAlert("Erro ao atualizar: "+error.message); return; }
         await pedidosLoad(); pedidosRender(document.getElementById("ped-search").value); pedidosRenderKpis();
       });
       actionTd.appendChild(buyBtn);
@@ -2026,7 +2124,7 @@ function pedidosRender(searchTerm){
     delBtn.addEventListener("click", async ()=>{
       if(confirm("Excluir este pedido?")){
         const { error } = await sb.from("pedidos").delete().eq("id", p.id);
-        if(error){ alert("Erro ao excluir: "+error.message); return; }
+        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         await pedidosLoad(); pedidosRender(""); pedidosRenderKpis();
       }
     });
@@ -2083,7 +2181,7 @@ function pedidosOpenForm(existingIndex){
       setDisplay("percentLucroBruto_display", fmtPercent(c.pct));
     },
     onSave: async (values)=>{
-      if(!values.licitante || !values.licitante.trim()){ alert("Informe o Licitante (Cliente)."); return false; }
+      if(!values.licitante || !values.licitante.trim()){ showAppAlert("Informe o Licitante (Cliente)."); return false; }
       const item = {
         numero: values.numero.trim(),
         licitante: values.licitante.trim(),
@@ -2111,7 +2209,7 @@ function pedidosOpenForm(existingIndex){
           const ins = await sb.from("pedidos").insert(payload).select().single();
           error = ins.error; newId = ins.data?.id;
         }
-        if(error){ alert("Erro ao salvar no Supabase: "+error.message); return false; }
+        if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
         if(newId){
           const { error: delErr } = await sb.from("pedidos").delete().eq("id", newId);
           if(delErr) console.error(delErr);
@@ -2131,7 +2229,7 @@ function pedidosOpenForm(existingIndex){
       } else {
         ({error} = await sb.from("pedidos").insert(payload));
       }
-      if(error){ alert("Erro ao salvar no Supabase: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
       await pedidosLoad(); pedidosRender(""); pedidosRenderKpis();
       return true;
     }
@@ -2231,7 +2329,7 @@ function planRender(searchTerm){
       e.stopPropagation();
       if(confirm("Excluir este item de planejamento?")){
         const { error } = await sb.from("planejamento").delete().eq("id", p.id);
-        if(error){ alert("Erro ao excluir: "+error.message); return; }
+        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
       }
     });
@@ -2261,7 +2359,7 @@ function planOpenForm(existingIndex){
       setDisplay("valorTotal_display", fmtCurrency(c.valorTotal));
     },
     onSave: async (values)=>{
-      if(!values.produto.trim()){ alert("Informe o produto."); return false; }
+      if(!values.produto.trim()){ showAppAlert("Informe o produto."); return false; }
       const item = {
         fornecedor: values.fornecedor.trim(),
         produto: values.produto.trim(),
@@ -2276,7 +2374,7 @@ function planOpenForm(existingIndex){
       } else {
         ({error} = await sb.from("planejamento").insert(payload));
       }
-      if(error){ alert("Erro ao salvar no Supabase: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
       await planLoad(); planPopulateFornecedorFilter(); planRender("");
       return true;
     }
@@ -2373,7 +2471,7 @@ function contasRender(searchTerm){
       e.stopPropagation();
       if(confirm("Excluir este registro?")){
         const { error } = await sb.from("contas_pagar").delete().eq("id", c.id);
-        if(error){ alert("Erro ao excluir: "+error.message); return; }
+        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         await contasLoad(); contasRender(""); renderContasKpis(); checkContasAlerts();
       }
     });
@@ -2397,7 +2495,7 @@ function contasOpenForm(id){
     icon: `<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>`,
     fields,
     onSave: async (values)=>{
-      if(!values.fornecedor.trim()){ alert("Informe o fornecedor."); return false; }
+      if(!values.fornecedor.trim()){ showAppAlert("Informe o fornecedor."); return false; }
       const payload = contasToDbPayload(values);
       let error;
       if(existing){
@@ -2405,7 +2503,7 @@ function contasOpenForm(id){
       } else {
         ({error} = await sb.from("contas_pagar").insert(payload));
       }
-      if(error){ alert("Erro ao salvar no Supabase: "+error.message); return false; }
+      if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
       await contasLoad(); contasRender(""); renderContasKpis(); checkContasAlerts();
       return true;
     }
@@ -2485,7 +2583,7 @@ async function initApp(){
   } catch(err){
     console.error(err);
     showSaveStatus("Erro ao carregar dados do Supabase");
-    alert("Não foi possível conectar ao Supabase. Verifique SUPABASE_URL/SUPABASE_ANON_KEY no início do <script> e sua conexão de internet.\n\nDetalhe: " + (err?.message || err));
+    showAppAlert("Não foi possível conectar ao Supabase. Verifique SUPABASE_URL/SUPABASE_ANON_KEY no início do <script> e sua conexão de internet.\n\nDetalhe: " + (err?.message || err));
   }
 }
 document.getElementById("footer-count").textContent = "Elétrica Mirra © " + new Date().getFullYear();
