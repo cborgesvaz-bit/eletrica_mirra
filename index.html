@@ -1809,13 +1809,17 @@ function renderMensal(){
     if(!d || !/^\d{4}-\d{2}/.test(d)) return;
     if(yearFilter && d.substring(0,4) !== yearFilter) return;
     const key = d.substring(0,7);
-    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, imposto:0, frete:0, caixaAdm:0, lucroReceber:0, lucroCRA:0, lucroCBVA:0, lucroRLV:0, lucroLBV:0, count:0, recebidos:0, pagos:0};
+    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, imposto:0, frete:0, caixaAdm:0, lucroReceber:0, percLucroSoma:0, percLucroCount:0, lucroCRA:0, lucroCBVA:0, lucroRLV:0, lucroLBV:0, count:0, recebidos:0, pagos:0};
     byMonth[key].compra += parseFloat(r["Valor Compra"])||0;
     byMonth[key].receber += parseFloat(r["Valor a Receber - TOTAL"])||0;
     byMonth[key].imposto += parseFloat(r["IMPOSTO"])||0;
     byMonth[key].frete += parseFloat(r["FRETE"])||0;
     byMonth[key].caixaAdm += parseFloat(r["CAIXA ADM"])||0;
     byMonth[key].lucroReceber += parseFloat(r["LUCRO a Receber"])||0;
+    if(r["% de LUCRO"] !== "" && r["% de LUCRO"] !== null && r["% de LUCRO"] !== undefined && !isNaN(parseFloat(r["% de LUCRO"]))){
+      byMonth[key].percLucroSoma += parseFloat(r["% de LUCRO"]);
+      byMonth[key].percLucroCount += 1;
+    }
     byMonth[key].lucroCRA += parseFloat(r["Lucro - CRA"])||0;
     byMonth[key].lucroCBVA += parseFloat(r["Lucro - CBVA"])||0;
     byMonth[key].lucroRLV += parseFloat(r["Lucro - RLV"])||0;
@@ -1844,7 +1848,7 @@ function renderMensal(){
       <div class="row"><span>Frete</span><b>${fmtCurrency(d.frete)}</b></div>
       <div class="row"><span>Caixa ADM</span><b>${fmtCurrency(d.caixaAdm)}</b></div>
       <div class="row"><span>Lucro a Receber</span><b style="color:${d.lucroReceber<0?'var(--neg)':'var(--pos)'}">${fmtCurrency(d.lucroReceber)}</b></div>
-      <div class="row"><span>% Lucro</span><b style="color:${d.lucroReceber<0?'var(--neg)':'var(--pos)'}">${d.receber?((d.lucroReceber/d.receber)*100).toFixed(2):'0.00'}%</b></div>
+      <div class="row"><span>% Lucro</span><b style="color:${d.lucroReceber<0?'var(--neg)':'var(--pos)'}">${d.percLucroCount?((d.percLucroSoma/d.percLucroCount)*100).toFixed(2):'0.00'}%</b></div>
       <div class="row"><span>Lucro CRA</span><b>${fmtCurrency(d.lucroCRA)}</b></div>
       <div class="row"><span>Lucro CBVA</span><b>${fmtCurrency(d.lucroCBVA)}</b></div>
       <div class="row"><span>Lucro RLV</span><b>${fmtCurrency(d.lucroRLV)}</b></div>
