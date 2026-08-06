@@ -554,6 +554,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Usuários
   </button>
+  <button class="tab-btn" data-view="parametros" id="tab-parametros" style="display:none;">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Parâmetros
+  </button>
 </nav>
 
 <main>
@@ -782,6 +786,24 @@
       </table>
     </div>
   </section>
+  <section id="view-parametros" class="view">
+    <div id="parametros-alert"></div>
+    <p style="color:var(--muted); margin:0 0 16px;">Cada linha vale a partir da "Vigência" até a próxima vigência cadastrada. O sistema usa automaticamente o parâmetro válido na data de pagamento (ou entrega/NF) de cada licitação — não precisa editar código quando o acordo entre sócios mudar.</p>
+    <div class="toolbar">
+      <button class="btn" id="parametros-add">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Nova Vigência
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Vigência desde</th><th>Imposto</th><th>Caixa ADM (sugestão)</th><th>CRA</th><th>CBVA</th><th>RLV</th><th>LBV</th><th>Observação</th><th>Ações</th>
+        </tr></thead>
+        <tbody id="parametros-body"></tbody>
+      </table>
+    </div>
+  </section>
 </main>
 </div>
 
@@ -875,6 +897,7 @@ function applyRoleToUI(){
   badge.textContent = isAdmin ? "Admin" : "Operador";
   badge.style.display = "inline-block";
   document.getElementById("tab-usuarios").style.display = isAdmin ? "" : "none";
+  document.getElementById("tab-parametros").style.display = isAdmin ? "" : "none";
   document.getElementById("user-email-label").textContent = currentUser?.email || "";
   document.getElementById("logout-btn").style.display = "inline-flex";
 }
@@ -1034,6 +1057,96 @@ document.getElementById("usuarios-add")?.addEventListener("click", async ()=>{
 });
 document.getElementById("usuarios-search")?.addEventListener("input", e=>usuariosRender(e.target.value));
 
+/* ============ PARÂMETROS FINANCEIROS (imposto/caixa ADM/split, versionados por vigência) ============ */
+let parametrosData = [];
+async function parametrosLoad(){
+  const { data, error } = await sb.from("parametros_financeiros").select("*").order("vigencia_inicio", {ascending:false});
+  if(error){
+    console.error(error);
+    showAppAlert("Não foi possível carregar os parâmetros financeiros.\n\nDetalhe: " + (error?.message || error));
+    parametrosData = [];
+    return;
+  }
+  parametrosData = data || [];
+}
+function fmtPctInput(v){ return v!==undefined && v!==null ? (Number(v)*100).toFixed(2) : ""; }
+function parametrosRender(){
+  const body = document.getElementById("parametros-body");
+  if(parametrosData.length===0){
+    body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px;">Nenhuma vigência cadastrada ainda.</td></tr>`;
+    return;
+  }
+  body.innerHTML = parametrosData.map((p,i)=>`
+    <tr>
+      <td>${fmtDateBR(p.vigencia_inicio)}</td>
+      <td>${fmtPctInput(p.imposto_pct)}%</td>
+      <td>${fmtPctInput(p.caixa_adm_pct)}%</td>
+      <td>${fmtPctInput(p.cra_pct)}%</td>
+      <td>${fmtPctInput(p.cbva_pct)}%</td>
+      <td>${fmtPctInput(p.rlv_pct)}%</td>
+      <td>${fmtPctInput(p.lbv_pct)}%</td>
+      <td>${p.observacao || ""}</td>
+      <td>
+        <button class="btn-icon" data-edit="${i}" title="Editar"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+        <button class="btn-icon" data-del="${i}" title="Excluir">${iconTrash}</button>
+      </td>
+    </tr>
+  `).join("");
+  body.querySelectorAll("[data-edit]").forEach(btn=>{
+    btn.addEventListener("click", ()=>parametrosOpenForm(parametrosData[Number(btn.dataset.edit)]));
+  });
+  body.querySelectorAll("[data-del]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const p = parametrosData[Number(btn.dataset.del)];
+      if(!confirm(`Excluir a vigência de ${fmtDateBR(p.vigencia_inicio)}? Licitações com data anterior a esta passarão a usar a vigência anterior disponível.`)) return;
+      const { error } = await sb.from("parametros_financeiros").delete().eq("id", p.id);
+      if(error){ showAppAlert("Erro ao excluir: " + error.message); return; }
+      await parametrosLoad(); parametrosRender();
+    });
+  });
+}
+function parametrosOpenForm(existing){
+  openModal({
+    title: existing ? "Editar Vigência" : "Nova Vigência",
+    fields: [
+      {key:"vigencia_inicio", label:"Vigência desde", type:"date", value: existing?.vigencia_inicio || ""},
+      {key:"imposto_pct", label:"Imposto (%)", type:"number", step:"0.01", value: existing ? fmtPctInput(existing.imposto_pct) : "7.00"},
+      {key:"caixa_adm_pct", label:"Caixa ADM sugerido (%)", type:"number", step:"0.01", value: existing ? fmtPctInput(existing.caixa_adm_pct) : "0.50"},
+      {key:"cra_pct", label:"CRA (%)", type:"number", step:"0.01", value: existing ? fmtPctInput(existing.cra_pct) : ""},
+      {key:"cbva_pct", label:"CBVA (%)", type:"number", step:"0.01", value: existing ? fmtPctInput(existing.cbva_pct) : ""},
+      {key:"rlv_pct", label:"RLV (%)", type:"number", step:"0.01", value: existing ? fmtPctInput(existing.rlv_pct) : ""},
+      {key:"lbv_pct", label:"LBV (%)", type:"number", step:"0.01", value: existing ? fmtPctInput(existing.lbv_pct) : ""},
+      {key:"observacao", label:"Observação (ex: novo acordo entre sócios)", type:"text", full:true, value: existing?.observacao || ""},
+    ],
+    onSave: async ()=>{
+      const get = k=>document.getElementById("modal-field-"+k).value;
+      const soma = (parseFloat(get("cra_pct"))||0) + (parseFloat(get("cbva_pct"))||0) + (parseFloat(get("rlv_pct"))||0) + (parseFloat(get("lbv_pct"))||0);
+      if(soma > 100.01){
+        showAppAlert(`A soma de CRA+CBVA+RLV+LBV está em ${soma.toFixed(2)}% — não pode passar de 100%.`);
+        return;
+      }
+      const payload = {
+        vigencia_inicio: get("vigencia_inicio"),
+        imposto_pct: (parseFloat(get("imposto_pct"))||0)/100,
+        caixa_adm_pct: (parseFloat(get("caixa_adm_pct"))||0)/100,
+        cra_pct: (parseFloat(get("cra_pct"))||0)/100,
+        cbva_pct: (parseFloat(get("cbva_pct"))||0)/100,
+        rlv_pct: (parseFloat(get("rlv_pct"))||0)/100,
+        lbv_pct: (parseFloat(get("lbv_pct"))||0)/100,
+        observacao: get("observacao") || null,
+      };
+      let error;
+      if(existing) ({error} = await sb.from("parametros_financeiros").update(payload).eq("id", existing.id));
+      else ({error} = await sb.from("parametros_financeiros").insert(payload));
+      if(error){ showAppAlert("Erro ao salvar vigência: " + error.message); return; }
+      closeModal();
+      await parametrosLoad(); parametrosRender();
+      showAppAlert("Vigência salva. Lembre-se: isso só afeta licitações salvas/editadas a partir de agora (o trigger recalcula no insert/update). Para aplicar retroativamente, rode o backfill no banco.");
+    }
+  });
+}
+document.getElementById("parametros-add")?.addEventListener("click", ()=>parametrosOpenForm(null));
+
 function showSaveStatus(text){
   const el = document.getElementById("save-status");
   if(el) el.textContent = text;
@@ -1060,6 +1173,13 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
         return;
       }
       usuariosLoad().then(()=>{ usuariosRender(""); usuariosRenderKpis(); });
+    }
+    if(btn.dataset.view === "parametros"){
+      if(currentProfile?.role !== "admin"){
+        showAppAlert("Apenas administradores podem acessar os parâmetros financeiros.");
+        return;
+      }
+      parametrosLoad().then(parametrosRender);
     }
   });
 });
