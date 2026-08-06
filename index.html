@@ -660,6 +660,10 @@
       </div>
       <select id="lic-status-filter"><option value="">Todos os status</option></select>
       <select id="lic-month-filter"><option value="">Todos os meses (Pagamento)</option></select>
+      <button class="btn danger" id="lic-delete-selected" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        Excluir selecionados (<span id="lic-selected-count">0</span>)
+      </button>
       <button class="btn secondary" id="lic-add">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Nova linha
@@ -910,6 +914,21 @@
     <div class="app-alert-title" id="app-alert-title">Aviso</div>
     <div class="app-alert-message" id="app-alert-message"></div>
     <button class="btn" id="app-alert-ok-btn">Ok, entendi</button>
+  </div>
+</div>
+
+<!-- MODAL DE CONFIRMAÇÃO (substitui confirm() nativo, ex.: exclusão de registros) -->
+<div class="app-alert-overlay" id="confirm-modal-overlay">
+  <div class="app-alert-card">
+    <div class="app-alert-icon warning" id="confirm-modal-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+    </div>
+    <div class="app-alert-title" id="confirm-modal-title">Confirmar exclusão</div>
+    <div class="app-alert-message" id="confirm-modal-message"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn secondary" id="confirm-modal-cancel-btn" style="flex:1;">Cancelar</button>
+      <button class="btn danger" id="confirm-modal-confirm-btn" style="flex:1;">Excluir</button>
+    </div>
   </div>
 </div>
 
@@ -1652,6 +1671,33 @@ appAlertOkBtn.addEventListener("click", closeAppAlert);
 appAlertOverlay.addEventListener("click", (e)=>{ if(e.target === appAlertOverlay) closeAppAlert(); });
 document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && appAlertOverlay.classList.contains("active")) closeAppAlert(); });
 
+/* ============ MODAL DE CONFIRMAÇÃO (substitui confirm() nativo) ============ */
+const confirmModalOverlay = document.getElementById("confirm-modal-overlay");
+const confirmModalTitle = document.getElementById("confirm-modal-title");
+const confirmModalMessage = document.getElementById("confirm-modal-message");
+const confirmModalCancelBtn = document.getElementById("confirm-modal-cancel-btn");
+const confirmModalConfirmBtn = document.getElementById("confirm-modal-confirm-btn");
+let confirmModalOnConfirm = null;
+function showConfirmModal({title, message, confirmLabel, onConfirm}){
+  confirmModalTitle.textContent = title || "Confirmar exclusão";
+  confirmModalMessage.textContent = message || "Tem certeza que deseja excluir? Esta ação não pode ser desfeita.";
+  confirmModalConfirmBtn.textContent = confirmLabel || "Excluir";
+  confirmModalOnConfirm = onConfirm;
+  confirmModalOverlay.classList.add("active");
+  setTimeout(()=> confirmModalCancelBtn.focus(), 50);
+}
+function closeConfirmModal(){ confirmModalOverlay.classList.remove("active"); confirmModalOnConfirm = null; }
+confirmModalCancelBtn.addEventListener("click", closeConfirmModal);
+confirmModalOverlay.addEventListener("click", (e)=>{ if(e.target === confirmModalOverlay) closeConfirmModal(); });
+confirmModalConfirmBtn.addEventListener("click", async ()=>{
+  if(!confirmModalOnConfirm) return;
+  const fn = confirmModalOnConfirm;
+  confirmModalConfirmBtn.disabled = true;
+  try{ await fn(); } finally { confirmModalConfirmBtn.disabled = false; }
+  closeConfirmModal();
+});
+document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && confirmModalOverlay.classList.contains("active")) closeConfirmModal(); });
+
 /* ============ MODAL GENÉRICO ============ */
 const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
@@ -1840,6 +1886,7 @@ const LIC_COLUMNS = [
 let licOriginal = JSON.parse(document.getElementById("original-data").textContent);
 let licData = [];
 let licSort = {key:null, dir:1};
+let licSelectedIds = new Set();
 
 const LIC_COLUMN_DB_MAP = {
   "Empenho":"empenho",
@@ -1914,6 +1961,10 @@ async function licLoad(){
 function licBuildHeader(){
   const row = document.getElementById("lic-header");
   row.innerHTML = "";
+  const thCheck = document.createElement("th");
+  thCheck.style.width = "34px";
+  thCheck.innerHTML = `<input type="checkbox" id="lic-select-all">`;
+  row.appendChild(thCheck);
   LIC_COLUMNS.forEach(col=>{
     const th = document.createElement("th");
     th.textContent = col.label;
@@ -1929,6 +1980,12 @@ function licBuildHeader(){
   const th = document.createElement("th");
   th.textContent = "Ações";
   row.appendChild(th);
+  document.getElementById("lic-select-all").addEventListener("change", (e)=>{
+    const rows = licFilteredSorted();
+    if(e.target.checked) rows.forEach(r=>licSelectedIds.add(r.id));
+    else rows.forEach(r=>licSelectedIds.delete(r.id));
+    licRender();
+  });
 }
 const LIC_STATUS_OPTIONS = ["A receber","Recebido","Atraso"];
 function licPopulateFilters(){
@@ -1984,6 +2041,18 @@ function licRender(){
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
     const idx = licData.indexOf(r);
+    const tdCheck = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = licSelectedIds.has(r.id);
+    chk.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(chk.checked) licSelectedIds.add(r.id); else licSelectedIds.delete(r.id);
+      licUpdateBulkBar();
+      licSyncSelectAllCheckbox();
+    });
+    tdCheck.appendChild(chk);
+    tr.appendChild(tdCheck);
     LIC_COLUMNS.forEach(col=>{
       const td = document.createElement("td");
       const raw = r[col.key];
@@ -2015,13 +2084,19 @@ function licRender(){
     const delBtn = document.createElement("button");
     delBtn.className = "icon-btn";
     delBtn.innerHTML = iconTrash + "Excluir";
-    delBtn.addEventListener("click", async (e)=>{
+    delBtn.addEventListener("click", (e)=>{
       e.stopPropagation();
-      if(confirm("Excluir esta linha?")){
-        const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
-        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
-        await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
-      }
+      showConfirmModal({
+        title: "Excluir registro",
+        message: `Tem certeza que deseja excluir a linha de "${r["Cliente"]||"registro sem cliente"}"? Esta ação não pode ser desfeita.`,
+        confirmLabel: "Excluir",
+        onConfirm: async ()=>{
+          const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
+          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+          licSelectedIds.delete(r.id);
+          await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+        }
+      });
     });
     actionTd.append(editBtn, delBtn);
     tr.appendChild(actionTd);
@@ -2029,6 +2104,23 @@ function licRender(){
     tbody.appendChild(tr);
   });
   document.getElementById("lic-count").textContent = rows.length + " registro(s) exibido(s) de " + licData.length + " total";
+  licUpdateBulkBar();
+  licSyncSelectAllCheckbox();
+}
+function licUpdateBulkBar(){
+  const btn = document.getElementById("lic-delete-selected");
+  const countEl = document.getElementById("lic-selected-count");
+  const n = licSelectedIds.size;
+  countEl.textContent = n;
+  btn.style.display = n > 0 ? "inline-flex" : "none";
+}
+function licSyncSelectAllCheckbox(){
+  const selectAll = document.getElementById("lic-select-all");
+  if(!selectAll) return;
+  const rows = licFilteredSorted();
+  const visibleSelected = rows.filter(r=>licSelectedIds.has(r.id)).length;
+  selectAll.checked = rows.length > 0 && visibleSelected === rows.length;
+  selectAll.indeterminate = visibleSelected > 0 && visibleSelected < rows.length;
 }
 function licRenderKpis(){
   const kpis = document.getElementById("lic-kpis");
@@ -2203,6 +2295,22 @@ document.getElementById("lic-status-filter").addEventListener("change", ()=>{lic
 document.getElementById("lic-month-filter").addEventListener("change", ()=>{licRender(); licRenderKpis();});
 document.getElementById("lic-add").addEventListener("click", ()=>licOpenForm(null));
 document.getElementById("lic-export").addEventListener("click", licExportCSV);
+document.getElementById("lic-delete-selected").addEventListener("click", ()=>{
+  const n = licSelectedIds.size;
+  if(n === 0) return;
+  showConfirmModal({
+    title: "Excluir registros selecionados",
+    message: `Tem certeza que deseja excluir ${n} registro(s) selecionado(s)? Esta ação não pode ser desfeita.`,
+    confirmLabel: `Excluir ${n} registro(s)`,
+    onConfirm: async ()=>{
+      const ids = [...licSelectedIds];
+      const { error } = await sb.from("licitacoes").delete().in("id", ids);
+      if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+      licSelectedIds.clear();
+      await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+    }
+  });
+});
 
 /* ============ LICITAÇÕES: IMPORTAÇÃO DE CSV ============ */
 // Cabeçalho do modelo que disponibilizamos para download. Os campos calculados
