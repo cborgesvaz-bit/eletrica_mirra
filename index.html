@@ -768,9 +768,24 @@
         Exportar XLS
       </button>
     </div>
+    <div class="toolbar" id="plan-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="plan-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <select id="plan-bulk-fornecedor"><option value="">Não alterar fornecedor</option></select>
+      <input type="number" id="plan-bulk-reajuste" placeholder="Reajuste de preço (%)" step="0.01" style="max-width:180px;">
+      <button class="btn secondary" id="plan-bulk-apply">Aplicar ajustes</button>
+      <select id="plan-bulk-status">
+        <option value="">Mover para Pedidos com status...</option>
+        <option value="À enviar">À enviar</option>
+        <option value="Comprado">Comprado</option>
+        <option value="Enviado">Enviado</option>
+      </select>
+      <button class="btn secondary" id="plan-bulk-move">Mover selecionados</button>
+      <button class="btn secondary" id="plan-bulk-delete">Excluir selecionados</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="plan-select-all"></th>
           <th>Fornecedor</th><th>Produto</th><th>Quantidade</th><th>Preço de Compra</th><th>Preço Unitário</th><th>Valor Total</th><th>Ações</th>
         </tr></thead>
         <tbody id="plan-body"></tbody>
@@ -2856,6 +2871,7 @@ document.querySelectorAll("#ped-subtabs .subtab-btn").forEach(btn=>{
 
 /* ============ PLANEJAMENTO (fornecedor/produto/quantidade/valores) ============ */
 let planData = [];
+let planSelectedIds = new Set();
 function planToDbPayload(item){
   return {
     fornecedor_nome: item.fornecedor || null,
@@ -2882,6 +2898,8 @@ async function planLoad(){
   const { data, error } = await sb.from("planejamento").select("*").order("created_at", {ascending:false});
   if(error){ console.error(error); planData = []; return; }
   planData = (data || []).map(planFromDbRow);
+  const validIds = new Set(planData.map(p=>p.id));
+  [...planSelectedIds].forEach(id=>{ if(!validIds.has(id)) planSelectedIds.delete(id); });
 }
 function planCompute(values){
   const q = parseFloat(values.quantidade) || 0;
@@ -2894,6 +2912,17 @@ function planPopulateFornecedorFilter(){
   const current = sel.value;
   sel.innerHTML = '<option value="">Todos os fornecedores</option>' + [...fornecedores].sort().map(f=>`<option value="${f}">${f}</option>`).join("");
   if(fornecedores.has(current)) sel.value = current;
+  const bulkSel = document.getElementById("plan-bulk-fornecedor");
+  const bulkCurrent = bulkSel.value;
+  bulkSel.innerHTML = '<option value="">Não alterar fornecedor</option>' + fornecedoresData.map(f=>`<option value="${f.nome}">${f.nome}</option>`).join("");
+  bulkSel.value = bulkCurrent;
+}
+function planUpdateBulkBar(){
+  const bar = document.getElementById("plan-bulk-bar");
+  const n = planSelectedIds.size;
+  if(n === 0){ bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  document.getElementById("plan-bulk-count").textContent = n + " selecionado(s)";
 }
 function planRender(searchTerm){
   const tbody = document.getElementById("plan-body");
@@ -2908,15 +2937,28 @@ function planRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
+    td.colSpan = 8;
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><div>Nenhum item de planejamento ainda. Pedidos com status "Selecionado pra compra" aparecem aqui automaticamente.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
+    document.getElementById("plan-select-all").checked = false;
+    planUpdateBulkBar();
     return;
   }
   rows.forEach(p=>{
     const idx = planData.indexOf(p);
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
+    const tdChk = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = planSelectedIds.has(p.id);
+    chk.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(chk.checked) planSelectedIds.add(p.id); else planSelectedIds.delete(p.id);
+      document.getElementById("plan-select-all").checked = rows.every(r=>planSelectedIds.has(r.id));
+      planUpdateBulkBar();
+    });
+    tdChk.appendChild(chk);
     const tdF = document.createElement("td"); tdF.textContent = p.fornecedor || "";
     const tdP = document.createElement("td"); tdP.textContent = p.produto || "";
     const tdQ = document.createElement("td"); tdQ.classList.add("num"); tdQ.textContent = p.quantidade || 0;
@@ -2937,14 +2979,17 @@ function planRender(searchTerm){
       if(confirm("Excluir este item de planejamento?")){
         const { error } = await sb.from("planejamento").delete().eq("id", p.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        planSelectedIds.delete(p.id);
         await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
       }
     });
     actionTd.append(editBtn, delBtn);
-    tr.append(tdF, tdP, tdQ, tdPC, tdPU, tdVT, actionTd);
+    tr.append(tdChk, tdF, tdP, tdQ, tdPC, tdPU, tdVT, actionTd);
     tr.addEventListener("click", ()=> planOpenForm(idx));
     tbody.appendChild(tr);
   });
+  document.getElementById("plan-select-all").checked = rows.every(r=>planSelectedIds.has(r.id));
+  planUpdateBulkBar();
 }
 function planOpenForm(existingIndex){
   const existing = existingIndex !== undefined && existingIndex !== null ? planData[existingIndex] : null;
@@ -2956,6 +3001,8 @@ function planOpenForm(existingIndex){
     {key:"precoCompra", label:"Preço de Compra (R$)", type:"number", step:"0.01", value: existing?.precoCompra ?? ""},
     {key:"precoUnitario", label:"Preço Unitário (R$)", type:"number", step:"0.01", value: existing?.precoUnitario ?? ""},
     {key:"valorTotal_display", label:"Valor Total", type:"text", readonly:true, value: fmtCurrency(existing ? (existing.valorTotal||0) : c0.valorTotal)},
+    {key:"statusPedido", label:"Status (devolver para Pedidos)", type:"select", full:true,
+      options:["Manter em Planejamento","À enviar","Comprado","Enviado"], value:"Manter em Planejamento"},
   ];
   openModal({
     title: existing ? "Editar Item de Planejamento" : "Novo Item de Planejamento",
@@ -2967,6 +3014,32 @@ function planOpenForm(existingIndex){
     },
     onSave: async (values)=>{
       if(!values.produto.trim()){ showAppAlert("Informe o produto."); return false; }
+
+      // Selecionar um status aqui devolve o item para a tela de Pedidos com o status escolhido
+      if(values.statusPedido && values.statusPedido !== "Manter em Planejamento"){
+        const pedidoPayload = {
+          fornecedor_nome: values.fornecedor.trim() || null,
+          fornecedor_id: findIdByName(fornecedoresData, values.fornecedor),
+          material: values.produto.trim() || null,
+          produto_id: findIdByName(produtosData, values.produto),
+          quantidade: parseFloat(values.quantidade) || 0,
+          preco_compra: parseFloat(values.precoCompra) || 0,
+          preco_venda: parseFloat(values.precoUnitario) || 0,
+          status: values.statusPedido,
+          comprado: values.statusPedido === "Comprado" || values.statusPedido === "Enviado",
+        };
+        const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
+        if(insErr){ showAppAlert("Erro ao devolver para Pedidos: "+insErr.message); return false; }
+        if(existing){
+          const { error: delErr } = await sb.from("planejamento").delete().eq("id", existing.id);
+          if(delErr) console.error(delErr);
+          planSelectedIds.delete(existing.id);
+        }
+        await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
+        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+        return true;
+      }
+
       const item = {
         fornecedor: values.fornecedor.trim(),
         produto: values.produto.trim(),
@@ -2982,7 +3055,7 @@ function planOpenForm(existingIndex){
         ({error} = await sb.from("planejamento").insert(payload));
       }
       if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
-      await planLoad(); planPopulateFornecedorFilter(); planRender("");
+      await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
       return true;
     }
   });
@@ -3009,6 +3082,84 @@ function planExportXLS(){
 document.getElementById("plan-search").addEventListener("input", e=>planRender(e.target.value));
 document.getElementById("plan-fornecedor-filter").addEventListener("change", ()=>planRender(document.getElementById("plan-search").value));
 document.getElementById("plan-export").addEventListener("click", planExportXLS);
+
+function planGetFilteredRows(){
+  const fornecedorFilter = document.getElementById("plan-fornecedor-filter").value;
+  const searchTerm = document.getElementById("plan-search").value.trim().toLowerCase();
+  let rows = planData;
+  if(fornecedorFilter) rows = rows.filter(p=>p.fornecedor === fornecedorFilter);
+  if(searchTerm) rows = rows.filter(p=>Object.values(p).join(" ").toLowerCase().includes(searchTerm));
+  return rows;
+}
+document.getElementById("plan-select-all").addEventListener("change", (e)=>{
+  const rows = planGetFilteredRows();
+  if(e.target.checked) rows.forEach(r=>planSelectedIds.add(r.id));
+  else rows.forEach(r=>planSelectedIds.delete(r.id));
+  planRender(document.getElementById("plan-search").value);
+});
+document.getElementById("plan-bulk-apply").addEventListener("click", async ()=>{
+  if(planSelectedIds.size === 0) return;
+  const novoFornecedor = document.getElementById("plan-bulk-fornecedor").value;
+  const reajusteStr = document.getElementById("plan-bulk-reajuste").value;
+  const reajuste = reajusteStr ? parseFloat(reajusteStr) : 0;
+  if(!novoFornecedor && !reajusteStr){ showAppAlert("Informe um novo fornecedor e/ou um percentual de reajuste."); return; }
+  const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
+  for(const p of selecionados){
+    const payload = {};
+    if(novoFornecedor){
+      payload.fornecedor_nome = novoFornecedor;
+      payload.fornecedor_id = findIdByName(fornecedoresData, novoFornecedor);
+    }
+    if(reajusteStr){
+      const fator = 1 + (reajuste/100);
+      payload.preco_compra = Math.round((parseFloat(p.precoCompra||0) * fator) * 100)/100;
+      payload.preco_unitario = Math.round((parseFloat(p.precoUnitario||0) * fator) * 100)/100;
+    }
+    const { error } = await sb.from("planejamento").update(payload).eq("id", p.id);
+    if(error){ console.error(error); showAppAlert("Erro ao ajustar item: "+error.message); }
+  }
+  document.getElementById("plan-bulk-reajuste").value = "";
+  await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
+});
+document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
+  if(planSelectedIds.size === 0) return;
+  const status = document.getElementById("plan-bulk-status").value;
+  if(!status){ showAppAlert("Selecione o status de destino em Pedidos."); return; }
+  const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
+  if(!confirm(`Mover ${selecionados.length} item(ns) para Pedidos com status "${status}"?`)) return;
+  for(const p of selecionados){
+    const pedidoPayload = {
+      fornecedor_nome: p.fornecedor || null,
+      fornecedor_id: findIdByName(fornecedoresData, p.fornecedor),
+      material: p.produto || null,
+      produto_id: findIdByName(produtosData, p.produto),
+      quantidade: parseFloat(p.quantidade) || 0,
+      preco_compra: parseFloat(p.precoCompra) || 0,
+      preco_venda: parseFloat(p.precoUnitario) || 0,
+      status: status,
+      comprado: status === "Comprado" || status === "Enviado",
+    };
+    const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
+    if(insErr){ console.error(insErr); showAppAlert("Erro ao devolver item para Pedidos: "+insErr.message); continue; }
+    const { error: delErr } = await sb.from("planejamento").delete().eq("id", p.id);
+    if(delErr) console.error(delErr);
+    planSelectedIds.delete(p.id);
+  }
+  document.getElementById("plan-bulk-status").value = "";
+  await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
+  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+});
+document.getElementById("plan-bulk-delete").addEventListener("click", async ()=>{
+  if(planSelectedIds.size === 0) return;
+  const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
+  if(!confirm(`Excluir ${selecionados.length} item(ns) de planejamento selecionado(s)?`)) return;
+  for(const p of selecionados){
+    const { error } = await sb.from("planejamento").delete().eq("id", p.id);
+    if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
+    planSelectedIds.delete(p.id);
+  }
+  await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
+});
 
 /* ============ CONTAS A PAGAR ============ */
 let contasData = [];
