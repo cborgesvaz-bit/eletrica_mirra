@@ -653,17 +653,29 @@
   <!-- LICITAÇÕES -->
   <section id="view-licitacoes" class="view active">
     <div class="kpis" id="lic-kpis"></div>
+    <div class="subtabs" id="lic-subtabs">
+      <button class="subtab-btn" data-subtab="">
+        Todos <span class="count" id="lic-count-todos">0</span>
+      </button>
+      <button class="subtab-btn active" data-subtab="areceber">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        A receber <span class="count" id="lic-count-areceber">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="recebido">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Recebido <span class="count" id="lic-count-recebido">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="atraso">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+        Atraso <span class="count" id="lic-count-atraso">0</span>
+      </button>
+    </div>
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="text" id="lic-search" placeholder="Buscar por cliente, empenho, NF...">
       </div>
-      <select id="lic-status-filter"><option value="">Todos os status</option></select>
       <select id="lic-month-filter"><option value="">Todos os meses (Pagamento)</option></select>
-      <button class="btn danger" id="lic-delete-selected" style="display:none;">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        Excluir selecionados (<span id="lic-selected-count">0</span>)
-      </button>
       <button class="btn secondary" id="lic-add">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Nova linha
@@ -768,16 +780,6 @@
   <section id="view-contas" class="view">
     <div id="contas-alert"></div>
     <div class="kpis" id="contas-kpis"></div>
-    <div class="subtabs" id="contas-subtabs">
-      <button class="subtab-btn active" data-subtab="apagar">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-        A Pagar <span class="count" id="contas-count-apagar">0</span>
-      </button>
-      <button class="subtab-btn" data-subtab="pago">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-        Pago <span class="count" id="contas-count-pago">0</span>
-      </button>
-    </div>
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -791,7 +793,7 @@
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Fornecedor</th><th>Valor</th><th>Juros</th><th>Vencimento</th><th>Status</th><th>Observação</th><th>Ações</th>
+          <th>Fornecedor</th><th>Valor</th><th>Juros</th><th>Vencimento</th><th>Status</th><th>Ações</th>
         </tr></thead>
         <tbody id="contas-body"></tbody>
       </table>
@@ -914,21 +916,6 @@
     <div class="app-alert-title" id="app-alert-title">Aviso</div>
     <div class="app-alert-message" id="app-alert-message"></div>
     <button class="btn" id="app-alert-ok-btn">Ok, entendi</button>
-  </div>
-</div>
-
-<!-- MODAL DE CONFIRMAÇÃO (substitui confirm() nativo, ex.: exclusão de registros) -->
-<div class="app-alert-overlay" id="confirm-modal-overlay">
-  <div class="app-alert-card">
-    <div class="app-alert-icon warning" id="confirm-modal-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
-    </div>
-    <div class="app-alert-title" id="confirm-modal-title">Confirmar exclusão</div>
-    <div class="app-alert-message" id="confirm-modal-message"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn secondary" id="confirm-modal-cancel-btn" style="flex:1;">Cancelar</button>
-      <button class="btn danger" id="confirm-modal-confirm-btn" style="flex:1;">Excluir</button>
-    </div>
   </div>
 </div>
 
@@ -1671,33 +1658,6 @@ appAlertOkBtn.addEventListener("click", closeAppAlert);
 appAlertOverlay.addEventListener("click", (e)=>{ if(e.target === appAlertOverlay) closeAppAlert(); });
 document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && appAlertOverlay.classList.contains("active")) closeAppAlert(); });
 
-/* ============ MODAL DE CONFIRMAÇÃO (substitui confirm() nativo) ============ */
-const confirmModalOverlay = document.getElementById("confirm-modal-overlay");
-const confirmModalTitle = document.getElementById("confirm-modal-title");
-const confirmModalMessage = document.getElementById("confirm-modal-message");
-const confirmModalCancelBtn = document.getElementById("confirm-modal-cancel-btn");
-const confirmModalConfirmBtn = document.getElementById("confirm-modal-confirm-btn");
-let confirmModalOnConfirm = null;
-function showConfirmModal({title, message, confirmLabel, onConfirm}){
-  confirmModalTitle.textContent = title || "Confirmar exclusão";
-  confirmModalMessage.textContent = message || "Tem certeza que deseja excluir? Esta ação não pode ser desfeita.";
-  confirmModalConfirmBtn.textContent = confirmLabel || "Excluir";
-  confirmModalOnConfirm = onConfirm;
-  confirmModalOverlay.classList.add("active");
-  setTimeout(()=> confirmModalCancelBtn.focus(), 50);
-}
-function closeConfirmModal(){ confirmModalOverlay.classList.remove("active"); confirmModalOnConfirm = null; }
-confirmModalCancelBtn.addEventListener("click", closeConfirmModal);
-confirmModalOverlay.addEventListener("click", (e)=>{ if(e.target === confirmModalOverlay) closeConfirmModal(); });
-confirmModalConfirmBtn.addEventListener("click", async ()=>{
-  if(!confirmModalOnConfirm) return;
-  const fn = confirmModalOnConfirm;
-  confirmModalConfirmBtn.disabled = true;
-  try{ await fn(); } finally { confirmModalConfirmBtn.disabled = false; }
-  closeConfirmModal();
-});
-document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && confirmModalOverlay.classList.contains("active")) closeConfirmModal(); });
-
 /* ============ MODAL GENÉRICO ============ */
 const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
@@ -1886,7 +1846,6 @@ const LIC_COLUMNS = [
 let licOriginal = JSON.parse(document.getElementById("original-data").textContent);
 let licData = [];
 let licSort = {key:null, dir:1};
-let licSelectedIds = new Set();
 
 const LIC_COLUMN_DB_MAP = {
   "Empenho":"empenho",
@@ -1961,10 +1920,6 @@ async function licLoad(){
 function licBuildHeader(){
   const row = document.getElementById("lic-header");
   row.innerHTML = "";
-  const thCheck = document.createElement("th");
-  thCheck.style.width = "34px";
-  thCheck.innerHTML = `<input type="checkbox" id="lic-select-all">`;
-  row.appendChild(thCheck);
   LIC_COLUMNS.forEach(col=>{
     const th = document.createElement("th");
     th.textContent = col.label;
@@ -1980,38 +1935,37 @@ function licBuildHeader(){
   const th = document.createElement("th");
   th.textContent = "Ações";
   row.appendChild(th);
-  document.getElementById("lic-select-all").addEventListener("change", (e)=>{
-    const rows = licFilteredSorted();
-    if(e.target.checked) rows.forEach(r=>licSelectedIds.add(r.id));
-    else rows.forEach(r=>licSelectedIds.delete(r.id));
-    licRender();
-  });
 }
 const LIC_STATUS_OPTIONS = ["A receber","Recebido","Atraso"];
+let licSubTab = "areceber";
 function licPopulateFilters(){
-  const statusSel = document.getElementById("lic-status-filter");
   const monthSel = document.getElementById("lic-month-filter");
   const months = new Set();
   licData.forEach(r=>{
     const d = r["Data de Pagamento"];
     if(d && /^\d{4}-\d{2}/.test(d)) months.add(d.substring(0,7));
   });
-  const currentStatus = statusSel.value;
-  statusSel.innerHTML = '<option value="">Todos os status</option>' + LIC_STATUS_OPTIONS.map(s=>`<option value="${s}">${s}</option>`).join("");
-  if(LIC_STATUS_OPTIONS.includes(currentStatus)) statusSel.value = currentStatus;
+  const currentMonth = monthSel.value;
   const MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
   monthSel.innerHTML = '<option value="">Todos os meses (Pagamento)</option>' + [...months].sort().map(m=>{
     const [y,mm] = m.split("-");
     const label = MESES_PT[parseInt(mm,10)-1] + "/" + y;
     return `<option value="${m}">${label}</option>`;
   }).join("");
+  if([...months].includes(currentMonth)) monthSel.value = currentMonth;
+  licUpdateSubtabCounts();
+}
+function licUpdateSubtabCounts(){
+  document.getElementById("lic-count-todos").textContent = licData.length;
+  document.getElementById("lic-count-areceber").textContent = licData.filter(r=>statusClass(r["Status de PGTO"])==="areceber").length;
+  document.getElementById("lic-count-recebido").textContent = licData.filter(r=>statusClass(r["Status de PGTO"])==="recebido").length;
+  document.getElementById("lic-count-atraso").textContent = licData.filter(r=>statusClass(r["Status de PGTO"])==="atraso").length;
 }
 function licFilteredSorted(){
   const search = document.getElementById("lic-search").value.trim().toLowerCase();
-  const status = document.getElementById("lic-status-filter").value;
   const month = document.getElementById("lic-month-filter").value;
   let rows = licData.filter(r=>{
-    if(status && statusClass(r["Status de PGTO"]) !== statusClass(status)) return false;
+    if(licSubTab && statusClass(r["Status de PGTO"]) !== licSubTab) return false;
     if(month && !(r["Data de Pagamento"] && r["Data de Pagamento"].startsWith(month))) return false;
     if(search && !Object.values(r).join(" ").toLowerCase().includes(search)) return false;
     return true;
@@ -2041,18 +1995,6 @@ function licRender(){
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
     const idx = licData.indexOf(r);
-    const tdCheck = document.createElement("td");
-    const chk = document.createElement("input");
-    chk.type = "checkbox";
-    chk.checked = licSelectedIds.has(r.id);
-    chk.addEventListener("click", (e)=>{
-      e.stopPropagation();
-      if(chk.checked) licSelectedIds.add(r.id); else licSelectedIds.delete(r.id);
-      licUpdateBulkBar();
-      licSyncSelectAllCheckbox();
-    });
-    tdCheck.appendChild(chk);
-    tr.appendChild(tdCheck);
     LIC_COLUMNS.forEach(col=>{
       const td = document.createElement("td");
       const raw = r[col.key];
@@ -2084,19 +2026,13 @@ function licRender(){
     const delBtn = document.createElement("button");
     delBtn.className = "icon-btn";
     delBtn.innerHTML = iconTrash + "Excluir";
-    delBtn.addEventListener("click", (e)=>{
+    delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
-      showConfirmModal({
-        title: "Excluir registro",
-        message: `Tem certeza que deseja excluir a linha de "${r["Cliente"]||"registro sem cliente"}"? Esta ação não pode ser desfeita.`,
-        confirmLabel: "Excluir",
-        onConfirm: async ()=>{
-          const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
-          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
-          licSelectedIds.delete(r.id);
-          await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
-        }
-      });
+      if(confirm("Excluir esta linha?")){
+        const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
+        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+      }
     });
     actionTd.append(editBtn, delBtn);
     tr.appendChild(actionTd);
@@ -2104,23 +2040,6 @@ function licRender(){
     tbody.appendChild(tr);
   });
   document.getElementById("lic-count").textContent = rows.length + " registro(s) exibido(s) de " + licData.length + " total";
-  licUpdateBulkBar();
-  licSyncSelectAllCheckbox();
-}
-function licUpdateBulkBar(){
-  const btn = document.getElementById("lic-delete-selected");
-  const countEl = document.getElementById("lic-selected-count");
-  const n = licSelectedIds.size;
-  countEl.textContent = n;
-  btn.style.display = n > 0 ? "inline-flex" : "none";
-}
-function licSyncSelectAllCheckbox(){
-  const selectAll = document.getElementById("lic-select-all");
-  if(!selectAll) return;
-  const rows = licFilteredSorted();
-  const visibleSelected = rows.filter(r=>licSelectedIds.has(r.id)).length;
-  selectAll.checked = rows.length > 0 && visibleSelected === rows.length;
-  selectAll.indeterminate = visibleSelected > 0 && visibleSelected < rows.length;
 }
 function licRenderKpis(){
   const kpis = document.getElementById("lic-kpis");
@@ -2291,26 +2210,17 @@ function licExportCSV(){
   URL.revokeObjectURL(url);
 }
 document.getElementById("lic-search").addEventListener("input", ()=>{licRender(); licRenderKpis();});
-document.getElementById("lic-status-filter").addEventListener("change", ()=>{licRender(); licRenderKpis();});
 document.getElementById("lic-month-filter").addEventListener("change", ()=>{licRender(); licRenderKpis();});
-document.getElementById("lic-add").addEventListener("click", ()=>licOpenForm(null));
-document.getElementById("lic-export").addEventListener("click", licExportCSV);
-document.getElementById("lic-delete-selected").addEventListener("click", ()=>{
-  const n = licSelectedIds.size;
-  if(n === 0) return;
-  showConfirmModal({
-    title: "Excluir registros selecionados",
-    message: `Tem certeza que deseja excluir ${n} registro(s) selecionado(s)? Esta ação não pode ser desfeita.`,
-    confirmLabel: `Excluir ${n} registro(s)`,
-    onConfirm: async ()=>{
-      const ids = [...licSelectedIds];
-      const { error } = await sb.from("licitacoes").delete().in("id", ids);
-      if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
-      licSelectedIds.clear();
-      await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
-    }
+document.querySelectorAll("#lic-subtabs .subtab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#lic-subtabs .subtab-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    licSubTab = btn.dataset.subtab;
+    licRender(); licRenderKpis();
   });
 });
+document.getElementById("lic-add").addEventListener("click", ()=>licOpenForm(null));
+document.getElementById("lic-export").addEventListener("click", licExportCSV);
 
 /* ============ LICITAÇÕES: IMPORTAÇÃO DE CSV ============ */
 // Cabeçalho do modelo que disponibilizamos para download. Os campos calculados
@@ -3043,7 +2953,6 @@ function contasToDbPayload(item){
     juros: parseFloat(item.juros) || 0,
     vencimento: item.vencimento || null,
     status: item.status || "Pendente",
-    observacao: item.observacao || null,
   };
 }
 function contasFromDbRow(r){
@@ -3054,7 +2963,6 @@ function contasFromDbRow(r){
     juros: r.juros,
     vencimento: r.vencimento || "",
     status: r.status,
-    observacao: r.observacao || "",
   };
 }
 async function contasLoad(){
@@ -3062,29 +2970,19 @@ async function contasLoad(){
   if(error){ console.error(error); contasData = []; return; }
   contasData = (data || []).map(contasFromDbRow);
 }
-let contasSubTab = "apagar";
-function contasRowSubTab(c){
-  const s = (c.status||"").toLowerCase();
-  return s.includes("pago") ? "pago" : "apagar";
-}
 function contasRender(searchTerm){
   const tbody = document.getElementById("contas-body");
   tbody.innerHTML = "";
-  let rows = contasData.filter(c => contasRowSubTab(c) === contasSubTab);
+  let rows = contasData;
   if(searchTerm){
     const s = searchTerm.toLowerCase();
-    rows = rows.filter(c=>Object.values(c).join(" ").toLowerCase().includes(s));
+    rows = contasData.filter(c=>Object.values(c).join(" ").toLowerCase().includes(s));
   }
-  document.getElementById("contas-count-apagar").textContent = contasData.filter(c=>contasRowSubTab(c)==="apagar").length;
-  document.getElementById("contas-count-pago").textContent = contasData.filter(c=>contasRowSubTab(c)==="pago").length;
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
-    const emptyMsg = contasSubTab === "pago"
-      ? "Nenhuma conta paga ainda."
-      : "Nenhuma conta pendente ou atrasada no momento. Clique em \"Nova Conta\" para adicionar.";
-    td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><div>${emptyMsg}</div></div>`;
+    td.colSpan = 6;
+    td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><div>Nenhuma conta cadastrada ainda. Clique em "Nova Conta" para adicionar.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
     return;
   }
@@ -3100,7 +2998,6 @@ function contasRender(searchTerm){
     span.className = "status " + statusClass(c.status);
     span.textContent = c.status || "—";
     tdStatus.appendChild(span);
-    const tdObs = document.createElement("td"); tdObs.textContent = c.observacao || "";
     const actionTd = document.createElement("td");
     actionTd.className = "row-actions";
     const editBtn = document.createElement("button");
@@ -3119,7 +3016,7 @@ function contasRender(searchTerm){
       }
     });
     actionTd.append(editBtn, delBtn);
-    tr.append(tdF, tdV, tdJ, tdVenc, tdStatus, tdObs, actionTd);
+    tr.append(tdF, tdV, tdJ, tdVenc, tdStatus, actionTd);
     tr.addEventListener("click", ()=> contasOpenForm(c.id));
     tbody.appendChild(tr);
   });
@@ -3132,7 +3029,6 @@ function contasOpenForm(id){
     {key:"juros", label:"Juros (R$)", type:"number", step:"0.01", value: existing?.juros ?? ""},
     {key:"vencimento", label:"Vencimento", type:"date", value: existing?.vencimento || ""},
     {key:"status", label:"Status", type:"select", options:["Pendente","Pago","Atrasado"], value: existing?.status || "Pendente"},
-    {key:"observacao", label:"Observação", type:"textarea", full:true, value: existing?.observacao || ""},
   ];
   openModal({
     title: existing ? "Editar Conta a Pagar" : "Nova Conta a Pagar",
@@ -3195,14 +3091,6 @@ function checkContasAlerts(){
 }
 document.getElementById("contas-add").addEventListener("click", ()=> contasOpenForm(null));
 document.getElementById("contas-search").addEventListener("input", e=>contasRender(e.target.value));
-document.querySelectorAll("#contas-subtabs .subtab-btn").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    document.querySelectorAll("#contas-subtabs .subtab-btn").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    contasSubTab = btn.dataset.subtab;
-    contasRender(document.getElementById("contas-search").value);
-  });
-});
 
 /* ============ INICIALIZAÇÃO (carrega tudo do Supabase, na ordem certa) ============ */
 async function initApp(){
