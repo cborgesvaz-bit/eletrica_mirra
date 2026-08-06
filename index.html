@@ -1052,7 +1052,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById("view-"+btn.dataset.view).classList.add("active");
-    if(btn.dataset.view === "mensal"){ mensalPopulateYearFilter(); renderMensal(); }
+    if(btn.dataset.view === "mensal"){ renderMensal(); }
     if(btn.dataset.view === "contas"){ renderContasKpis(); checkContasAlerts(); }
     if(btn.dataset.view === "usuarios"){
       if(currentProfile?.role !== "admin"){
@@ -2115,88 +2115,68 @@ document.getElementById("lic-import-file").addEventListener("change", (e)=>{
   if(file) licImportCSV(file);
 });
 
-/* ============ MENSAL (auto agregado a partir de Licitações) ============ */
+/* ============ MENSAL (lê direto da view vw_mensal — sem re-agregar no cliente) ============ */
+let mensalRows = [];
+async function mensalLoad(){
+  const { data, error } = await sb.from("vw_mensal").select("*").order("competencia", {ascending:false});
+  if(error){
+    console.error(error);
+    showAppAlert("Não foi possível carregar os dados mensais (vw_mensal). Verifique se a view foi criada no Supabase.\n\nDetalhe: " + (error?.message || error));
+    mensalRows = [];
+    return;
+  }
+  mensalRows = data || [];
+}
 function mensalPopulateYearFilter(){
   const sel = document.getElementById("mensal-year-filter");
-  const dateField = "Data de Pagamento";
-  const years = new Set();
-  licData.forEach(r=>{
-    const d = r[dateField];
-    if(d && /^\d{4}-\d{2}/.test(d)) years.add(d.substring(0,4));
-  });
+  const years = [...new Set(mensalRows.map(r=>String(r.ano)))].sort().reverse();
   const current = sel.value;
-  sel.innerHTML = '<option value="">Todos os anos</option>' + [...years].sort().reverse().map(y=>`<option value="${y}">${y}</option>`).join("");
-  if([...years].includes(current)) sel.value = current;
+  sel.innerHTML = '<option value="">Todos os anos</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join("");
+  if(years.includes(current)) sel.value = current;
 }
-function renderMensal(){
+async function renderMensal(){
+  const grid = document.getElementById("mensal-grid");
+  await mensalLoad();
+  mensalPopulateYearFilter();
+  const yearFilter = document.getElementById("mensal-year-filter").value;
+  const rows = yearFilter ? mensalRows.filter(r=>String(r.ano)===yearFilter) : mensalRows;
+  renderMensalRows(rows, grid);
+}
+document.getElementById("mensal-year-filter").addEventListener("change", ()=>{
+  // filtro local (mensalRows já carregado); não precisa recarregar do banco
   const grid = document.getElementById("mensal-grid");
   const yearFilter = document.getElementById("mensal-year-filter").value;
-  const dateField = "Data de Pagamento";
-  const byMonth = {};
-  licData.forEach(r=>{
-    const d = r[dateField];
-    if(!d || !/^\d{4}-\d{2}/.test(d)) return;
-    if(yearFilter && d.substring(0,4) !== yearFilter) return;
-    const key = d.substring(0,7);
-    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, lucro:0, count:0, recebidos:0, pagos:0, imposto:0, frete:0, caixaAdm:0, cra:0, cbva:0, rlv:0, lbv:0};
-    // Usa os valores já calculados/salvos no registro; se algum campo calculado estiver
-    // ausente (registro antigo/incompleto), recalcula com licCompute para não distorcer o total.
-    const c = licCompute(r);
-    const imposto = r["IMPOSTO"]!==undefined && r["IMPOSTO"]!=="" ? licParseNum(r["IMPOSTO"]) : c.imposto;
-    const frete = licParseNum(r["FRETE"]);
-    const caixaAdm = r["CAIXA ADM"]!==undefined && r["CAIXA ADM"]!=="" ? licParseNum(r["CAIXA ADM"]) : 0;
-    const lucro = r["LUCRO a Receber"]!==undefined && r["LUCRO a Receber"]!=="" ? licParseNum(r["LUCRO a Receber"]) : c.lucro;
-    const cra = r["Lucro - CRA"]!==undefined && r["Lucro - CRA"]!=="" ? licParseNum(r["Lucro - CRA"]) : c.cra;
-    const cbva = r["Lucro - CBVA"]!==undefined && r["Lucro - CBVA"]!=="" ? licParseNum(r["Lucro - CBVA"]) : c.cbva;
-    const rlv = r["Lucro - RLV"]!==undefined && r["Lucro - RLV"]!=="" ? licParseNum(r["Lucro - RLV"]) : c.rlv;
-    const lbv = r["Lucro LBV"]!==undefined && r["Lucro LBV"]!=="" ? licParseNum(r["Lucro LBV"]) : c.lbv;
-    byMonth[key].compra += licParseNum(r["Valor Compra"]);
-    byMonth[key].receber += licParseNum(r["Valor a Receber - TOTAL"]);
-    byMonth[key].lucro += lucro;
-    byMonth[key].imposto += imposto;
-    byMonth[key].frete += frete;
-    byMonth[key].caixaAdm += caixaAdm;
-    byMonth[key].cra += cra;
-    byMonth[key].cbva += cbva;
-    byMonth[key].rlv += rlv;
-    byMonth[key].lbv += lbv;
-    byMonth[key].count += 1;
-    if(statusClass(r["Status de PGTO"])==="recebido") byMonth[key].recebidos += 1;
-    if(r["Data de Pagamento"]) byMonth[key].pagos += 1;
-  });
-  const months = Object.keys(byMonth).sort().reverse();
-  if(months.length===0){
+  const rows = yearFilter ? mensalRows.filter(r=>String(r.ano)===yearFilter) : mensalRows;
+  renderMensalRows(rows, grid);
+});
+function renderMensalRows(rows, grid){
+  if(rows.length===0){
     grid.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg><div>Nenhum dado mensal disponível ainda.</div></div>`;
     return;
   }
-  const monthNames = {"01":"Janeiro","02":"Fevereiro","03":"Março","04":"Abril","05":"Maio","06":"Junho","07":"Julho","08":"Agosto","09":"Setembro","10":"Outubro","11":"Novembro","12":"Dezembro"};
-  grid.innerHTML = months.map(m=>{
-    const [y,mm] = m.split("-");
-    const d = byMonth[m];
-    // % Lucro do mês = Lucro / Custo Total do mês (Compra + Imposto + Frete + Caixa ADM),
-    // mesma lógica corrigida usada em licCompute — nunca lucro/valorCompra.
-    const custoTotalMes = d.compra + d.imposto + d.frete + d.caixaAdm;
-    const pctMes = custoTotalMes !== 0 ? (d.lucro/custoTotalMes) : 0;
+  const monthNames = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"};
+  grid.innerHTML = rows.map(d=>{
+    const lucro = Number(d.lucro_a_receber)||0;
+    const pct = Number(d.percentual_lucro)||0;
     return `<div class="month-card">
-      <h3><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" stroke="var(--yellow)"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${monthNames[mm]||mm} ${y}</h3>
-      <div class="row"><span>Registros</span><b>${d.count}</b></div>
-      <div class="row"><span>Recebidos</span><b>${d.recebidos}/${d.count}</b></div>
-      <div class="row"><span>Com Data de Pagamento</span><b>${d.pagos}/${d.count}</b></div>
-      <div class="row"><span>Valor Compra</span><b>${fmtCurrency(d.compra)}</b></div>
-      <div class="row"><span>Valor a Receber</span><b>${fmtCurrency(d.receber)}</b></div>
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" stroke="var(--yellow)"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${monthNames[d.mes]||d.mes} ${d.ano}</h3>
+      <div class="row"><span>Registros</span><b>${d.registros}</b></div>
+      <div class="row"><span>Recebidos</span><b>${d.recebidos}/${d.registros}</b></div>
+      <div class="row"><span>Com Data de Pagamento</span><b>${d.pagos}/${d.registros}</b></div>
+      <div class="row"><span>Valor Compra</span><b>${fmtCurrency(d.valor_compra)}</b></div>
+      <div class="row"><span>Valor a Receber</span><b>${fmtCurrency(d.valor_receber)}</b></div>
       <div class="row"><span>Imposto</span><b>${fmtCurrency(d.imposto)}</b></div>
       <div class="row"><span>Frete</span><b>${fmtCurrency(d.frete)}</b></div>
-      <div class="row"><span>Caixa ADM</span><b>${fmtCurrency(d.caixaAdm)}</b></div>
-      <div class="row"><span>Lucro a Receber</span><b style="color:${d.lucro<0?'var(--neg)':'var(--pos)'}">${fmtCurrency(d.lucro)}</b></div>
-      <div class="row"><span>% Lucro</span><b style="color:${pctMes<0?'var(--neg)':'var(--pos)'}">${fmtPercent(pctMes)}</b></div>
-      <div class="row"><span>Lucro CRA</span><b>${fmtCurrency(d.cra)}</b></div>
-      <div class="row"><span>Lucro CBVA</span><b>${fmtCurrency(d.cbva)}</b></div>
-      <div class="row"><span>Lucro RLV</span><b>${fmtCurrency(d.rlv)}</b></div>
-      <div class="row"><span>Lucro LBV</span><b>${fmtCurrency(d.lbv)}</b></div>
+      <div class="row"><span>Caixa ADM</span><b>${fmtCurrency(d.caixa_adm)}</b></div>
+      <div class="row"><span>Lucro a Receber</span><b style="color:${lucro<0?'var(--neg)':'var(--pos)'}">${fmtCurrency(lucro)}</b></div>
+      <div class="row"><span>% Lucro</span><b style="color:${pct<0?'var(--neg)':'var(--pos)'}">${fmtPercent(pct)}</b></div>
+      <div class="row"><span>Lucro CRA</span><b>${fmtCurrency(d.lucro_cra)}</b></div>
+      <div class="row"><span>Lucro CBVA</span><b>${fmtCurrency(d.lucro_cbva)}</b></div>
+      <div class="row"><span>Lucro RLV</span><b>${fmtCurrency(d.lucro_rlv)}</b></div>
+      <div class="row"><span>Lucro LBV</span><b>${fmtCurrency(d.lucro_lbv)}</b></div>
     </div>`;
   }).join("");
 }
-document.getElementById("mensal-year-filter").addEventListener("change", renderMensal);
 
 /* (módulo genérico makeCrud removido — Contas a Pagar agora tem módulo dedicado ao Supabase, ver mais abaixo) */
 
