@@ -694,6 +694,19 @@
       </button>
       <input type="file" id="lic-import-file" accept=".csv" style="display:none;">
     </div>
+    <div class="toolbar" id="lic-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="lic-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <select id="lic-bulk-status">
+        <option value="">Alterar status de PGTO...</option>
+        <option value="A receber">A receber</option>
+        <option value="Recebido">Recebido</option>
+        <option value="Atraso">Atraso</option>
+      </select>
+      <button class="btn secondary" id="lic-bulk-apply-status">Aplicar status</button>
+      <input type="date" id="lic-bulk-data-pagamento" style="max-width:170px;" title="Definir Data de Pagamento em lote">
+      <button class="btn secondary" id="lic-bulk-apply-data">Aplicar data</button>
+      <button class="btn secondary" id="lic-bulk-delete">Excluir selecionados</button>
+    </div>
     <div class="table-wrap">
       <table id="lic-table">
         <thead><tr id="lic-header"></tr></thead>
@@ -2113,13 +2126,48 @@ async function licLoad(){
     if(impErr) console.error("Erro na importação inicial:", impErr);
     const retry = await sb.from("licitacoes").select("*").order("data_nf", {ascending:false, nullsFirst:false});
     licData = (retry.data || []).map(licFromDbRow);
+    await licApplyAtrasoAutomation();
+    licSelectedIds = new Set([...licSelectedIds].filter(id=>licData.some(r=>r.id===id)));
     return;
   }
   licData = (data || []).map(licFromDbRow);
+  await licApplyAtrasoAutomation();
+  licSelectedIds = new Set([...licSelectedIds].filter(id=>licData.some(r=>r.id===id)));
+}
+async function licApplyAtrasoAutomation(){
+  // Se a Data de Pagamento já passou e o status ainda não é "Recebido", o registro
+  // deve automaticamente virar "Atraso" e ser exibido na sub-aba correspondente.
+  const hojeStr = new Date().toISOString().substring(0,10);
+  const paraAtualizar = licData.filter(r=>{
+    const dp = r["Data de Pagamento"];
+    if(!dp) return false;
+    if(statusClass(r["Status de PGTO"]) === "recebido") return false;
+    if(statusClass(r["Status de PGTO"]) === "atraso") return false;
+    return dp < hojeStr;
+  });
+  if(paraAtualizar.length === 0) return;
+  for(const r of paraAtualizar){
+    const { error } = await sb.from("licitacoes").update({status_pgto:"Atraso"}).eq("id", r.id);
+    if(error){ console.error(error); continue; }
+    r["Status de PGTO"] = "Atraso";
+  }
 }
 function licBuildHeader(){
   const row = document.getElementById("lic-header");
   row.innerHTML = "";
+  const thChk = document.createElement("th");
+  thChk.style.width = "32px";
+  const selAll = document.createElement("input");
+  selAll.type = "checkbox";
+  selAll.id = "lic-select-all";
+  selAll.addEventListener("change", (e)=>{
+    const rows = licFilteredSorted();
+    if(e.target.checked) rows.forEach(r=>licSelectedIds.add(r.id));
+    else rows.forEach(r=>licSelectedIds.delete(r.id));
+    licRender();
+  });
+  thChk.appendChild(selAll);
+  row.appendChild(thChk);
   LIC_COLUMNS.forEach(col=>{
     const th = document.createElement("th");
     th.textContent = col.label;
@@ -2138,6 +2186,7 @@ function licBuildHeader(){
 }
 const LIC_STATUS_OPTIONS = ["A receber","Recebido","Atraso"];
 let licSubTab = "areceber";
+let licSelectedIds = new Set();
 function licPopulateFilters(){
   const monthSel = document.getElementById("lic-month-filter");
   const months = new Set();
@@ -2183,6 +2232,13 @@ function licFilteredSorted(){
   }
   return rows;
 }
+function licUpdateBulkBar(){
+  const bar = document.getElementById("lic-bulk-bar");
+  const n = licSelectedIds.size;
+  if(n === 0){ bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  document.getElementById("lic-bulk-count").textContent = n + " selecionado(s)";
+}
 function licRender(){
   const tbody = document.getElementById("lic-body");
   tbody.innerHTML = "";
@@ -2195,6 +2251,19 @@ function licRender(){
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
     const idx = licData.indexOf(r);
+    const tdChk = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = licSelectedIds.has(r.id);
+    chk.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(chk.checked) licSelectedIds.add(r.id); else licSelectedIds.delete(r.id);
+      const selAll = document.getElementById("lic-select-all");
+      if(selAll) selAll.checked = rows.every(x=>licSelectedIds.has(x.id));
+      licUpdateBulkBar();
+    });
+    tdChk.appendChild(chk);
+    tr.appendChild(tdChk);
     LIC_COLUMNS.forEach(col=>{
       const td = document.createElement("td");
       const raw = r[col.key];
@@ -2231,6 +2300,7 @@ function licRender(){
       if(confirm("Excluir esta linha?")){
         const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        licSelectedIds.delete(r.id);
         await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
       }
     });
@@ -2240,6 +2310,9 @@ function licRender(){
     tbody.appendChild(tr);
   });
   document.getElementById("lic-count").textContent = rows.length + " registro(s) exibido(s) de " + licData.length + " total";
+  const selAll = document.getElementById("lic-select-all");
+  if(selAll) selAll.checked = rows.length>0 && rows.every(r=>licSelectedIds.has(r.id));
+  licUpdateBulkBar();
 }
 function licRenderKpis(){
   const kpis = document.getElementById("lic-kpis");
@@ -2421,6 +2494,41 @@ document.querySelectorAll("#lic-subtabs .subtab-btn").forEach(btn=>{
 });
 document.getElementById("lic-add").addEventListener("click", ()=>licOpenForm(null));
 document.getElementById("lic-export").addEventListener("click", licExportCSV);
+document.getElementById("lic-bulk-apply-status").addEventListener("click", async ()=>{
+  if(licSelectedIds.size === 0) return;
+  const status = document.getElementById("lic-bulk-status").value;
+  if(!status){ showAppAlert("Selecione o novo status de PGTO."); return; }
+  const selecionados = licData.filter(r=>licSelectedIds.has(r.id));
+  for(const r of selecionados){
+    const { error } = await sb.from("licitacoes").update({status_pgto:status}).eq("id", r.id);
+    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
+  }
+  document.getElementById("lic-bulk-status").value = "";
+  await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+});
+document.getElementById("lic-bulk-apply-data").addEventListener("click", async ()=>{
+  if(licSelectedIds.size === 0) return;
+  const data = document.getElementById("lic-bulk-data-pagamento").value;
+  if(!data){ showAppAlert("Selecione a Data de Pagamento a aplicar."); return; }
+  const selecionados = licData.filter(r=>licSelectedIds.has(r.id));
+  for(const r of selecionados){
+    const { error } = await sb.from("licitacoes").update({data_pagamento:data}).eq("id", r.id);
+    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
+  }
+  document.getElementById("lic-bulk-data-pagamento").value = "";
+  await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+});
+document.getElementById("lic-bulk-delete").addEventListener("click", async ()=>{
+  if(licSelectedIds.size === 0) return;
+  const selecionados = licData.filter(r=>licSelectedIds.has(r.id));
+  if(!confirm(`Excluir ${selecionados.length} registro(s) de licitação selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+  for(const r of selecionados){
+    const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
+    if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
+    licSelectedIds.delete(r.id);
+  }
+  await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+});
 
 /* ============ LICITAÇÕES: IMPORTAÇÃO DE CSV ============ */
 // Cabeçalho do modelo que disponibilizamos para download. Os campos calculados
