@@ -325,6 +325,13 @@
   .modal-body .field{display:flex;flex-direction:column;gap:6px;}
   .modal-body .field.full{grid-column:1/-1;}
   .modal-body .field.autocomplete-wrap{position:relative;}
+  .modal-fields-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px;grid-column:1/-1;}
+  #ped-items-container{grid-column:1/-1;display:flex;flex-direction:column;gap:14px;}
+  .ped-item-row{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--bg);}
+  .ped-item-row-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .ped-item-row-head strong{color:var(--navy);font-size:13px;}
+  .ped-item-row .autocomplete-wrap{position:relative;}
+  #ped-items-container ~ .btn.secondary{grid-column:1/-1;}
   .autocomplete-list{
     position:absolute;
     top:calc(100% + 4px);
@@ -1827,6 +1834,30 @@ modalBody.addEventListener("input", (e)=>{
 });
 const quickAddHandlers = { cliente: addClienteQuick, fornecedor: addFornecedorQuick, produto: addProdutoQuick };
 
+function attachAutocomplete(input, wrapEl, getSource){
+  input.autocomplete = "off";
+  const listEl = wrapEl.querySelector(".autocomplete-list");
+  if(!listEl) return;
+  const renderAutoList = ()=>{
+    const term = input.value.trim().toLowerCase();
+    const items = getSource().filter(n=>n && (!term || n.toLowerCase().includes(term))).slice(0,60);
+    listEl.innerHTML = items.length === 0
+      ? `<div class="autocomplete-empty">Nenhum cadastro encontrado</div>`
+      : items.map(n=>`<div class="autocomplete-item">${n}</div>`).join("");
+    listEl.style.display = "block";
+  };
+  input.addEventListener("focus", renderAutoList);
+  input.addEventListener("input", renderAutoList);
+  input.addEventListener("blur", ()=>{ listEl.style.display = "none"; });
+  listEl.addEventListener("mousedown", (e)=>{
+    e.preventDefault();
+    const item = e.target.closest(".autocomplete-item");
+    if(!item) return;
+    input.value = item.textContent;
+    listEl.style.display = "none";
+    input.dispatchEvent(new Event("input", {bubbles:true}));
+  });
+}
 function openModal({title, icon, fields, onSave, onInput}){
   modalTitle.textContent = title;
   modalTitleWrap.querySelector("svg").outerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon||'<path d="M12 5v14M5 12h14"/>'}</svg>`;
@@ -3016,131 +3047,253 @@ function pedidosRenderKpis(){
   `;
 }
 
+/* ---- Novo Pedido / Editar Pedido: cabeçalho único + N produtos (multi-item) ----
+   Cada "produto" continua sendo persistido como uma linha independente na tabela
+   `pedidos` (mesmo modelo de hoje), só que agora o modal permite lançar várias
+   linhas de uma vez, compartilhando numero/licitante/empenho/dataPedidoEmail.
+   Como fornecedor e status já são por linha, isso também resolve a seleção de
+   compra individual por produto (mesma NE pode ter fornecedores diferentes). */
+function pedidosItemDefaults(existing){
+  return {
+    id: existing?.id || null,
+    fornecedor: existing?.fornecedor || "",
+    material: existing?.material || "",
+    quantidade: existing?.quantidade ?? "",
+    precoCompra: existing?.precoCompra ?? "",
+    precoVenda: existing?.precoVenda ?? "",
+    dataCompra: existing?.dataCompra || "",
+    dataEnvio: existing?.dataEnvio || "",
+    comprado: existing?.comprado || false,
+    status: existing?.status || "À enviar",
+    statusAnterior: existing?.status || null,
+  };
+}
 function pedidosOpenForm(existingIndex){
   const existing = existingIndex !== undefined && existingIndex !== null ? pedidosData[existingIndex] : null;
-  const fields = [
-    {key:"numero", label:"Nº Pedido", type:"text", value: existing?.numero || ""},
-    {key:"licitante", label:"Licitante (Cliente)", type:"text", datalist:"clientes-datalist", quickAdd:"cliente", full:true, value: existing?.licitante || ""},
-    {key:"fornecedor", label:"Fornecedor", type:"text", datalist:"fornecedores-datalist", quickAdd:"fornecedor", full:true, value: existing?.fornecedor || ""},
-    {key:"empenho", label:"Nº Empenho", type:"text", value: existing?.empenho || ""},
-    {key:"material", label:"Material", type:"text", datalist:"produtos-datalist", quickAdd:"produto", full:true, value: existing?.material || ""},
-    {key:"quantidade", label:"Quantidade", type:"number", step:"0.01", value: existing?.quantidade ?? ""},
-    {key:"precoCompra", label:"Preço Compra (R$)", type:"number", step:"0.01", value: existing?.precoCompra ?? ""},
-    {key:"precoVenda", label:"Preço Venda (R$)", type:"number", step:"0.01", value: existing?.precoVenda ?? ""},
-    {key:"dataPedidoEmail", label:"Data Pedido Email", type:"date", value: existing?.dataPedidoEmail || ""},
-    {key:"dataCompra", label:"Data da Compra", type:"date", value: existing?.dataCompra || ""},
-    {key:"dataEnvio", label:"Data Envio", type:"date", value: existing?.dataEnvio || ""},
-    {key:"prazoMaximoEnvio_display", label:"Prazo Máximo Envio (+30 dias)", type:"text", readonly:true, value: existing ? fmtDateBR(existing.prazoMaximoEnvio) : ""},
-    {key:"valorTotalCompra_display", label:"Valor Total da Compra", type:"text", readonly:true, value: existing ? fmtCurrency(existing.valorTotalCompra||0) : fmtCurrency(0)},
-    {key:"valorTotalVenda_display", label:"Valor Total da Venda", type:"text", readonly:true, value: existing ? fmtCurrency(existing.valorTotalVenda||0) : fmtCurrency(0)},
-    {key:"lucroBruto_display", label:"Lucro Bruto", type:"text", readonly:true, value: existing ? fmtCurrency(existing.lucroBruto||0) : fmtCurrency(0)},
-    {key:"percentLucroBruto_display", label:"% Lucro Bruto", type:"text", readonly:true, value: existing ? fmtPercent(existing.percentLucroBruto||0) : fmtPercent(0)},
-    {key:"comprado", label:"Produto já foi comprado?", type:"checkbox", full:true, value: existing?.comprado || false},
-    {key:"status", label:"Status", type:"select", options:["À enviar","Comprado","Enviado","Selecionado pra compra"], value: existing?.status || "À enviar"},
-    {key:"observacao", label:"Observação", type:"textarea", full:true, value: existing?.observacao || ""},
-  ];
-  openModal({
-    title: existing ? "Editar Pedido" : "Novo Pedido",
-    icon: `<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>`,
-    fields,
-    onInput: (values, setDisplay, changedKey)=>{
-      const c = pedidosCompute(values);
-      setDisplay("prazoMaximoEnvio_display", fmtDateBR(c.prazo));
-      setDisplay("valorTotalCompra_display", fmtCurrency(c.totalCompra));
-      setDisplay("valorTotalVenda_display", fmtCurrency(c.totalVenda));
-      setDisplay("lucroBruto_display", fmtCurrency(c.lucro));
-      setDisplay("percentLucroBruto_display", fmtPercent(c.pct));
-      // Marcar "já foi comprado?" deve refletir no status (e vice-versa)
-      if(changedKey === "comprado"){
-        if(values.comprado && values.status !== "Enviado" && values.status !== "Selecionado pra compra"){
-          setDisplay("status", "Comprado");
-        } else if(!values.comprado && values.status === "Comprado"){
-          setDisplay("status", "À enviar");
-        }
-      } else if(changedKey === "status"){
-        setDisplay("comprado", values.status === "Comprado" || values.status === "Enviado" || values.status === "Selecionado pra compra");
-      }
-    },
-    onSave: async (values)=>{
-      if(!values.licitante || !values.licitante.trim()){ showAppAlert("Informe o Licitante (Cliente)."); return false; }
-      const statusAnterior = existing?.status || null;
-      const item = {
-        numero: values.numero.trim(),
-        licitante: values.licitante.trim(),
-        fornecedor: values.fornecedor.trim(),
-        empenho: values.empenho.trim(),
-        material: values.material.trim(),
-        quantidade: values.quantidade,
-        precoCompra: values.precoCompra,
-        precoVenda: values.precoVenda,
-        dataPedidoEmail: values.dataPedidoEmail,
-        dataCompra: values.dataCompra,
-        dataEnvio: values.dataEnvio,
-        comprado: !!values.comprado,
-        status: values.status,
-        observacao: values.observacao.trim(),
-      };
-      const payload = pedidosToDbPayload(item);
+  let itemRows = [ pedidosItemDefaults(existing) ];
 
-      if(item.status === "Selecionado pra compra"){
-        // o trigger do banco cria automaticamente o item em Planejamento;
-        // aqui só persistimos o pedido e, em seguida, removemos ele da lista de Pedidos
-        let error, newId = existing?.id;
-        if(existing){
-          ({error} = await sb.from("pedidos").update(payload).eq("id", existing.id));
+  modalTitle.textContent = existing ? "Editar Pedido" : "Novo Pedido";
+  modalTitleWrap.querySelector("svg").outerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`;
+  modalBody.innerHTML = "";
+
+  const headerWrap = document.createElement("div");
+  headerWrap.className = "modal-fields-grid";
+  headerWrap.innerHTML = `
+    <div class="field"><label>Nº Pedido</label><input id="ped-h-numero" type="text" value="${existing?.numero || ""}"></div>
+    <div class="field"><label>Nº Empenho</label><input id="ped-h-empenho" type="text" value="${existing?.empenho || ""}"></div>
+    <div class="field full autocomplete-wrap"><label>Licitante (Cliente)</label><input id="ped-h-licitante" type="text" autocomplete="off" value="${existing?.licitante || ""}"><div class="autocomplete-list" style="display:none"></div>
+      <div class="client-quickadd"><button type="button"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo cliente</button></div>
+    </div>
+    <div class="field"><label>Data Pedido Email</label><input id="ped-h-dataPedidoEmail" type="date" value="${existing?.dataPedidoEmail || ""}"></div>
+    <div class="field"><label>Prazo Máximo Envio (+30 dias)</label><input id="ped-h-prazo" type="text" readonly style="background:var(--line);color:var(--muted);font-weight:700" value="${existing ? fmtDateBR(existing.prazoMaximoEnvio) : ""}"></div>
+    <div class="field full"><label>Observação</label><textarea id="ped-h-observacao">${existing?.observacao || ""}</textarea></div>
+  `;
+  modalBody.appendChild(headerWrap);
+  attachAutocomplete(headerWrap.querySelector("#ped-h-licitante"), headerWrap.querySelector(".autocomplete-wrap"), ()=>clientesData.map(c=>c.nome));
+  headerWrap.querySelector(".client-quickadd button").addEventListener("click", ()=>{
+    const input = headerWrap.querySelector("#ped-h-licitante");
+    addClienteQuick(input.value, (novoNome)=>{ input.value = novoNome; });
+  });
+  headerWrap.querySelector("#ped-h-dataPedidoEmail").addEventListener("input", updateHeaderPrazo);
+  function updateHeaderPrazo(){
+    const c = pedidosCompute({dataPedidoEmail: headerWrap.querySelector("#ped-h-dataPedidoEmail").value});
+    headerWrap.querySelector("#ped-h-prazo").value = fmtDateBR(c.prazo);
+  }
+
+  const itemsTitle = document.createElement("div");
+  itemsTitle.className = "field full";
+  itemsTitle.innerHTML = `<label style="margin-top:6px;">Produtos deste pedido</label>`;
+  modalBody.appendChild(itemsTitle);
+
+  const itemsContainer = document.createElement("div");
+  itemsContainer.id = "ped-items-container";
+  modalBody.appendChild(itemsContainer);
+
+  const addRowBtn = document.createElement("button");
+  addRowBtn.type = "button";
+  addRowBtn.className = "btn secondary";
+  addRowBtn.style.marginTop = "8px";
+  addRowBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar produto`;
+  addRowBtn.addEventListener("click", ()=>{ itemRows.push(pedidosItemDefaults(null)); renderItems(); });
+  modalBody.appendChild(addRowBtn);
+
+  function renderItems(){
+    itemsContainer.innerHTML = "";
+    itemRows.forEach((row, i)=>{
+      const box = document.createElement("div");
+      box.className = "ped-item-row";
+      box.innerHTML = `
+        <div class="ped-item-row-head">
+          <strong>Produto ${i+1}</strong>
+          ${itemRows.length > 1 ? `<button type="button" class="icon-btn ped-item-remove">${iconTrash}Remover</button>` : ""}
+        </div>
+        <div class="modal-fields-grid">
+          <div class="field full autocomplete-wrap"><label>Fornecedor</label><input class="pi-fornecedor" type="text" autocomplete="off" value="${row.fornecedor}"><div class="autocomplete-list" style="display:none"></div>
+            <div class="client-quickadd"><button type="button" class="pi-add-fornecedor"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo fornecedor</button></div>
+          </div>
+          <div class="field full autocomplete-wrap"><label>Material</label><input class="pi-material" type="text" autocomplete="off" value="${row.material}"><div class="autocomplete-list" style="display:none"></div>
+            <div class="client-quickadd"><button type="button" class="pi-add-produto"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo produto</button></div>
+          </div>
+          <div class="field"><label>Quantidade</label><input class="pi-quantidade" type="number" step="0.01" value="${row.quantidade}"></div>
+          <div class="field"><label>Preço Compra (R$)</label><input class="pi-precoCompra" type="number" step="0.01" value="${row.precoCompra}"></div>
+          <div class="field"><label>Preço Venda (R$)</label><input class="pi-precoVenda" type="number" step="0.01" value="${row.precoVenda}"></div>
+          <div class="field"><label>Data da Compra</label><input class="pi-dataCompra" type="date" value="${row.dataCompra}"></div>
+          <div class="field"><label>Data Envio</label><input class="pi-dataEnvio" type="date" value="${row.dataEnvio}"></div>
+          <div class="field"><label>Valor Total Compra</label><input class="pi-totalCompra" type="text" readonly style="background:var(--line);color:var(--muted);font-weight:700"></div>
+          <div class="field"><label>Valor Total Venda</label><input class="pi-totalVenda" type="text" readonly style="background:var(--line);color:var(--muted);font-weight:700"></div>
+          <div class="field"><label>Lucro Bruto</label><input class="pi-lucro" type="text" readonly style="background:var(--line);color:var(--muted);font-weight:700"></div>
+          <div class="field"><label>% Lucro Bruto</label><input class="pi-pct" type="text" readonly style="background:var(--line);color:var(--muted);font-weight:700"></div>
+          <div class="field checkbox-field"><label>Produto já foi comprado?</label><input class="pi-comprado" type="checkbox" ${row.comprado?"checked":""}></div>
+          <div class="field full"><label>Status (deste produto)</label>
+            <select class="pi-status">
+              ${["À enviar","Comprado","Enviado","Selecionado pra compra"].map(o=>`<option value="${o}" ${row.status===o?"selected":""}>${o}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+      `;
+      itemsContainer.appendChild(box);
+
+      const fInput = box.querySelector(".pi-fornecedor");
+      const mInput = box.querySelector(".pi-material");
+      attachAutocomplete(fInput, box.querySelectorAll(".autocomplete-wrap")[0], ()=>fornecedoresData.map(c=>c.nome));
+      attachAutocomplete(mInput, box.querySelectorAll(".autocomplete-wrap")[1], ()=>produtosData.map(c=>c.nome));
+      box.querySelector(".pi-add-fornecedor").addEventListener("click", ()=>{ addFornecedorQuick(fInput.value, (n)=>{ fInput.value = n; }); });
+      box.querySelector(".pi-add-produto").addEventListener("click", ()=>{ addProdutoQuick(mInput.value, (n)=>{ mInput.value = n; }); });
+
+      const removeBtn = box.querySelector(".ped-item-remove");
+      if(removeBtn) removeBtn.addEventListener("click", ()=>{ itemRows.splice(i,1); renderItems(); });
+
+      const recompute = ()=>{
+        const q = parseFloat(box.querySelector(".pi-quantidade").value) || 0;
+        const pc = parseFloat(box.querySelector(".pi-precoCompra").value) || 0;
+        const pv = parseFloat(box.querySelector(".pi-precoVenda").value) || 0;
+        const totalCompra = q*pc, totalVenda = q*pv, lucro = totalVenda-totalCompra;
+        const pct = totalCompra !== 0 ? (lucro/totalCompra) : 0;
+        box.querySelector(".pi-totalCompra").value = fmtCurrency(totalCompra);
+        box.querySelector(".pi-totalVenda").value = fmtCurrency(totalVenda);
+        box.querySelector(".pi-lucro").value = fmtCurrency(lucro);
+        box.querySelector(".pi-pct").value = fmtPercent(pct);
+      };
+      box.querySelectorAll(".pi-quantidade,.pi-precoCompra,.pi-precoVenda").forEach(el=>el.addEventListener("input", recompute));
+      const compradoEl = box.querySelector(".pi-comprado");
+      const statusEl = box.querySelector(".pi-status");
+      compradoEl.addEventListener("change", ()=>{
+        if(compradoEl.checked && statusEl.value !== "Enviado" && statusEl.value !== "Selecionado pra compra") statusEl.value = "Comprado";
+        else if(!compradoEl.checked && statusEl.value === "Comprado") statusEl.value = "À enviar";
+      });
+      statusEl.addEventListener("change", ()=>{
+        compradoEl.checked = ["Comprado","Enviado","Selecionado pra compra"].includes(statusEl.value);
+      });
+      recompute();
+    });
+  }
+  renderItems();
+
+  modalOnSave = async ()=>{
+    const numero = headerWrap.querySelector("#ped-h-numero").value.trim();
+    const licitante = headerWrap.querySelector("#ped-h-licitante").value.trim();
+    const empenho = headerWrap.querySelector("#ped-h-empenho").value.trim();
+    const dataPedidoEmail = headerWrap.querySelector("#ped-h-dataPedidoEmail").value;
+    const observacao = headerWrap.querySelector("#ped-h-observacao").value.trim();
+    if(!licitante){ showAppAlert("Informe o Licitante (Cliente)."); return; }
+
+    const rowBoxes = [...itemsContainer.querySelectorAll(".ped-item-row")];
+    if(rowBoxes.length === 0){ showAppAlert("Adicione ao menos um produto."); return; }
+    for(const box of rowBoxes){
+      if(!box.querySelector(".pi-material").value.trim()){ showAppAlert("Informe o material em todos os produtos."); return; }
+    }
+
+    const saveBtn = document.getElementById("modal-save-btn");
+    saveBtn.disabled = true; saveBtn.style.opacity = "0.6";
+    let movedToPlanejamento = false;
+    try{
+      for(let i=0;i<rowBoxes.length;i++){
+        const box = rowBoxes[i];
+        const row = itemRows[i];
+        const item = {
+          numero, licitante, empenho, dataPedidoEmail, observacao,
+          fornecedor: box.querySelector(".pi-fornecedor").value.trim(),
+          material: box.querySelector(".pi-material").value.trim(),
+          quantidade: box.querySelector(".pi-quantidade").value,
+          precoCompra: box.querySelector(".pi-precoCompra").value,
+          precoVenda: box.querySelector(".pi-precoVenda").value,
+          dataCompra: box.querySelector(".pi-dataCompra").value,
+          dataEnvio: box.querySelector(".pi-dataEnvio").value,
+          comprado: box.querySelector(".pi-comprado").checked,
+          status: box.querySelector(".pi-status").value,
+        };
+        const payload = pedidosToDbPayload(item);
+        const statusAnterior = row.statusAnterior;
+
+        if(item.status === "Selecionado pra compra"){
+          // o trigger do banco cria automaticamente o item em Planejamento;
+          // aqui só persistimos o pedido e, em seguida, removemos ele da lista de Pedidos
+          let error, newId = row.id;
+          if(row.id){
+            ({error} = await sb.from("pedidos").update(payload).eq("id", row.id));
+          } else {
+            const ins = await sb.from("pedidos").insert(payload).select().single();
+            error = ins.error; newId = ins.data?.id;
+          }
+          if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); continue; }
+          if(newId){
+            const { error: delErr } = await sb.from("pedidos").delete().eq("id", newId);
+            if(delErr) console.error(delErr);
+          }
+          movedToPlanejamento = true;
+          continue;
+        }
+
+        let error;
+        if(row.id){
+          ({error} = await sb.from("pedidos").update(payload).eq("id", row.id));
         } else {
-          const ins = await sb.from("pedidos").insert(payload).select().single();
-          error = ins.error; newId = ins.data?.id;
+          ({error} = await sb.from("pedidos").insert(payload));
         }
-        if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
-        if(newId){
-          const { error: delErr } = await sb.from("pedidos").delete().eq("id", newId);
-          if(delErr) console.error(delErr);
+        if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); continue; }
+
+        // Integração: pedido que passa a "Enviado" é duplicado para Licitações, mantendo os dados intactos
+        if(item.status === "Enviado" && statusAnterior !== "Enviado"){
+          const licPayload = {
+            empenho: item.empenho || null,
+            numero_pedido: item.numero || null,
+            data_envio: item.dataEnvio || null,
+            cliente_id: findIdByName(clientesData, item.licitante),
+            cliente_nome: item.licitante || null,
+            valor_compra: parseFloat(item.precoCompra && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoCompra)) : 0) || 0,
+            valor_receber_total: parseFloat(item.precoVenda && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoVenda)) : 0) || 0,
+            produto: item.material || null,
+            observacao_geral: item.observacao || null,
+          };
+          const { error: licErr } = await sb.from("licitacoes").insert(licPayload);
+          if(licErr){
+            console.error(licErr);
+            showAppAlert("Pedido salvo, mas houve erro ao duplicar para Licitações: "+licErr.message);
+          } else {
+            await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+          }
         }
-        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+      }
+
+      await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+      if(movedToPlanejamento){
         await planLoad(); planPopulateFornecedorFilter(); planRender("");
         document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
         document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
         document.querySelector('.tab-btn[data-view="planejamento"]')?.classList.add("active");
         document.getElementById("view-planejamento")?.classList.add("active");
-        return true;
       }
-
-      let error, savedId = existing?.id;
-      if(existing){
-        ({error} = await sb.from("pedidos").update(payload).eq("id", existing.id));
-      } else {
-        const ins = await sb.from("pedidos").insert(payload).select().single();
-        error = ins.error; savedId = ins.data?.id;
-      }
-      if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
-
-      // Integração: pedido que passa a "Enviado" é duplicado para Licitações, mantendo os dados intactos
-      if(item.status === "Enviado" && statusAnterior !== "Enviado"){
-        const licPayload = {
-          empenho: item.empenho || null,
-          numero_pedido: item.numero || null,
-          data_envio: item.dataEnvio || null,
-          cliente_id: findIdByName(clientesData, item.licitante),
-          cliente_nome: item.licitante || null,
-          valor_compra: parseFloat(item.precoCompra && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoCompra)) : 0) || 0,
-          valor_receber_total: parseFloat(item.precoVenda && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoVenda)) : 0) || 0,
-          produto: item.material || null,
-          observacao_geral: item.observacao || null,
-        };
-        const { error: licErr } = await sb.from("licitacoes").insert(licPayload);
-        if(licErr){
-          console.error(licErr);
-          showAppAlert("Pedido salvo, mas houve erro ao duplicar para Licitações: "+licErr.message);
-        } else {
-          await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
-        }
-      }
-
-      await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
-      return true;
+      closeModal();
+    } catch(err){
+      console.error(err);
+      showAppAlert("Erro ao salvar: " + (err?.message || err));
+    } finally {
+      saveBtn.disabled = false; saveBtn.style.opacity = "";
     }
-  });
+  };
+  modalOnInput = null; modalGetValues = null; modalSetDisplay = null;
+  modalOverlay.classList.add("active");
+  setTimeout(()=>{ const first = modalBody.querySelector("input:not([readonly]),select,textarea"); if(first) first.focus(); }, 50);
 }
 
 document.getElementById("ped-add").addEventListener("click", ()=>pedidosOpenForm(null));
