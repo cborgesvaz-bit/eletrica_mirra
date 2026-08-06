@@ -725,6 +725,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="text" id="ped-search" placeholder="Buscar pedido, licitante, fornecedor, material...">
       </div>
+      <select id="ped-fornecedor-filter"><option value="">Todos os fornecedores</option></select>
+      <select id="ped-status-filter"><option value="">Todos os status</option></select>
       <button class="btn" id="ped-add">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Novo Pedido
@@ -735,7 +737,7 @@
         <thead><tr>
           <th>Nº Pedido</th><th>Licitante</th><th>Fornecedor</th><th>Nº Empenho</th><th>Material</th>
           <th>Qtd</th><th>Preço Compra</th><th>Preço Venda</th>
-          <th>Data Pedido Email</th><th>Data da Compra</th><th>Prazo Máx. Envio</th>
+          <th>Data Pedido Email</th><th>Data da Compra</th><th>Data Envio</th><th>Prazo Máx. Envio</th>
           <th>Valor Total Compra</th><th>Valor Total Venda</th>
           <th>Lucro Bruto</th><th>% Lucro Bruto</th>
           <th>Comprado</th><th>Status</th><th>Observação</th><th>Ações</th>
@@ -1789,10 +1791,14 @@ function openModal({title, icon, fields, onSave, onInput}){
   if(modalOnInput){
     const getValues = ()=>{
       const v = {};
-      fields.forEach(f=>{ const el = document.getElementById("modal-field-"+f.key); if(el) v[f.key]=el.value; });
+      fields.forEach(f=>{ const el = document.getElementById("modal-field-"+f.key); if(el) v[f.key] = f.type === "checkbox" ? el.checked : el.value; });
       return v;
     };
-    const setDisplay = (key,val)=>{ const el = document.getElementById("modal-field-"+key); if(el) el.value = val; };
+    const setDisplay = (key,val)=>{
+      const el = document.getElementById("modal-field-"+key);
+      if(!el) return;
+      if(el.type === "checkbox") el.checked = !!val; else el.value = val;
+    };
     modalGetValues = getValues;
     modalSetDisplay = setDisplay;
     modalOnInput(getValues(), setDisplay);
@@ -2497,7 +2503,7 @@ let pedidosData = [];
 const PEDIDOS_COLUMN_DB_MAP = {
   numero:"numero", licitante:"licitante_nome", fornecedor:"fornecedor_nome", empenho:"empenho",
   material:"material", quantidade:"quantidade", precoCompra:"preco_compra", precoVenda:"preco_venda",
-  dataPedidoEmail:"data_pedido_email", dataCompra:"data_compra", comprado:"comprado",
+  dataPedidoEmail:"data_pedido_email", dataCompra:"data_compra", dataEnvio:"data_envio", comprado:"comprado",
   status:"status", observacao:"observacao"
 };
 function pedidosToDbPayload(item){
@@ -2527,6 +2533,7 @@ function pedidosFromDbRow(r){
     precoVenda: r.preco_venda,
     dataPedidoEmail: r.data_pedido_email || "",
     dataCompra: r.data_compra || "",
+    dataEnvio: r.data_envio || "",
     prazoMaximoEnvio: r.prazo_maximo_envio || "",
     valorTotalCompra: r.valor_total_compra,
     valorTotalVenda: r.valor_total_venda,
@@ -2578,10 +2585,26 @@ function pedidosRowSubTab(p){
   return PEDIDOS_STATUS_SUBTAB[p.status] || "recebidos";
 }
 
+function pedidosPopulateFilters(){
+  const fornSel = document.getElementById("ped-fornecedor-filter");
+  const statusSel = document.getElementById("ped-status-filter");
+  const fornecedores = [...new Set(pedidosData.map(p=>p.fornecedor).filter(Boolean))].sort();
+  const statuses = [...new Set(pedidosData.map(p=>p.status).filter(Boolean))].sort();
+  const currentForn = fornSel.value, currentStatus = statusSel.value;
+  fornSel.innerHTML = '<option value="">Todos os fornecedores</option>' + fornecedores.map(f=>`<option value="${f}">${f}</option>`).join("");
+  statusSel.innerHTML = '<option value="">Todos os status</option>' + statuses.map(s=>`<option value="${s}">${s}</option>`).join("");
+  if(fornecedores.includes(currentForn)) fornSel.value = currentForn;
+  if(statuses.includes(currentStatus)) statusSel.value = currentStatus;
+}
+
 function pedidosRender(searchTerm){
   const tbody = document.getElementById("ped-body");
   tbody.innerHTML = "";
+  const fornFilter = document.getElementById("ped-fornecedor-filter").value;
+  const statusFilter = document.getElementById("ped-status-filter").value;
   let rows = pedidosData.filter(p => pedidosRowSubTab(p) === pedidosSubTab);
+  if(fornFilter) rows = rows.filter(p => p.fornecedor === fornFilter);
+  if(statusFilter) rows = rows.filter(p => p.status === statusFilter);
   if(searchTerm){
     const s = searchTerm.toLowerCase();
     rows = rows.filter(p => Object.values(p).join(" ").toLowerCase().includes(s));
@@ -2592,7 +2615,7 @@ function pedidosRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 19;
+    td.colSpan = 20;
     const emptyMsg = pedidosSubTab === "comprado"
       ? "Nenhum pedido comprado ainda. Altere o status para \"Comprado\" ao editar um pedido para movê-lo para cá."
       : pedidosSubTab === "enviados"
@@ -2605,6 +2628,7 @@ function pedidosRender(searchTerm){
   rows.forEach(p=>{
     const idx = pedidosData.indexOf(p);
     const tr = document.createElement("tr");
+    tr.style.cursor = "pointer";
     const cell = (text, opts={}) => {
       const td = document.createElement("td");
       if(opts.num) td.classList.add("num");
@@ -2622,6 +2646,7 @@ function pedidosRender(searchTerm){
     tr.appendChild(cell(p.precoVenda!==""&&p.precoVenda!==undefined ? fmtCurrency(p.precoVenda) : "", {num:true}));
     tr.appendChild(cell(fmtDateBR(p.dataPedidoEmail)));
     tr.appendChild(cell(fmtDateBR(p.dataCompra)));
+    tr.appendChild(cell(fmtDateBR(p.dataEnvio)));
     tr.appendChild(cell(fmtDateBR(p.prazoMaximoEnvio)));
     tr.appendChild(cell(fmtCurrency(p.valorTotalCompra||0), {num:true}));
     tr.appendChild(cell(fmtCurrency(p.valorTotalVenda||0), {num:true}));
@@ -2647,29 +2672,32 @@ function pedidosRender(searchTerm){
       buyBtn.style.color = "var(--pos)";
       buyBtn.style.borderColor = "var(--pos)";
       buyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Marcar comprado`;
-      buyBtn.addEventListener("click", async ()=>{
+      buyBtn.addEventListener("click", async (e)=>{
+        e.stopPropagation();
         const { error } = await sb.from("pedidos").update({status:"Comprado", comprado:true}).eq("id", p.id);
         if(error){ showAppAlert("Erro ao atualizar: "+error.message); return; }
-        await pedidosLoad(); pedidosRender(document.getElementById("ped-search").value); pedidosRenderKpis();
+        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(document.getElementById("ped-search").value); pedidosRenderKpis();
       });
       actionTd.appendChild(buyBtn);
     }
     const editBtn = document.createElement("button");
     editBtn.className = "icon-btn";
     editBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>Editar`;
-    editBtn.addEventListener("click", ()=>pedidosOpenForm(idx));
+    editBtn.addEventListener("click", (e)=>{ e.stopPropagation(); pedidosOpenForm(idx); });
     const delBtn = document.createElement("button");
     delBtn.className = "icon-btn";
     delBtn.innerHTML = iconTrash + "Excluir";
-    delBtn.addEventListener("click", async ()=>{
+    delBtn.addEventListener("click", async (e)=>{
+      e.stopPropagation();
       if(confirm("Excluir este pedido?")){
         const { error } = await sb.from("pedidos").delete().eq("id", p.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
-        await pedidosLoad(); pedidosRender(""); pedidosRenderKpis();
+        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
       }
     });
     actionTd.append(editBtn, delBtn);
     tr.appendChild(actionTd);
+    tr.addEventListener("click", ()=>pedidosOpenForm(idx));
     tbody.appendChild(tr);
   });
 }
@@ -2699,6 +2727,7 @@ function pedidosOpenForm(existingIndex){
     {key:"precoVenda", label:"Preço Venda (R$)", type:"number", step:"0.01", value: existing?.precoVenda ?? ""},
     {key:"dataPedidoEmail", label:"Data Pedido Email", type:"date", value: existing?.dataPedidoEmail || ""},
     {key:"dataCompra", label:"Data da Compra", type:"date", value: existing?.dataCompra || ""},
+    {key:"dataEnvio", label:"Data Envio", type:"date", value: existing?.dataEnvio || ""},
     {key:"prazoMaximoEnvio_display", label:"Prazo Máximo Envio (+30 dias)", type:"text", readonly:true, value: existing ? fmtDateBR(existing.prazoMaximoEnvio) : ""},
     {key:"valorTotalCompra_display", label:"Valor Total da Compra", type:"text", readonly:true, value: existing ? fmtCurrency(existing.valorTotalCompra||0) : fmtCurrency(0)},
     {key:"valorTotalVenda_display", label:"Valor Total da Venda", type:"text", readonly:true, value: existing ? fmtCurrency(existing.valorTotalVenda||0) : fmtCurrency(0)},
@@ -2712,16 +2741,27 @@ function pedidosOpenForm(existingIndex){
     title: existing ? "Editar Pedido" : "Novo Pedido",
     icon: `<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>`,
     fields,
-    onInput: (values, setDisplay)=>{
+    onInput: (values, setDisplay, changedKey)=>{
       const c = pedidosCompute(values);
       setDisplay("prazoMaximoEnvio_display", fmtDateBR(c.prazo));
       setDisplay("valorTotalCompra_display", fmtCurrency(c.totalCompra));
       setDisplay("valorTotalVenda_display", fmtCurrency(c.totalVenda));
       setDisplay("lucroBruto_display", fmtCurrency(c.lucro));
       setDisplay("percentLucroBruto_display", fmtPercent(c.pct));
+      // Marcar "já foi comprado?" deve refletir no status (e vice-versa)
+      if(changedKey === "comprado"){
+        if(values.comprado && values.status !== "Enviado" && values.status !== "Selecionado pra compra"){
+          setDisplay("status", "Comprado");
+        } else if(!values.comprado && values.status === "Comprado"){
+          setDisplay("status", "À enviar");
+        }
+      } else if(changedKey === "status"){
+        setDisplay("comprado", values.status === "Comprado" || values.status === "Enviado" || values.status === "Selecionado pra compra");
+      }
     },
     onSave: async (values)=>{
       if(!values.licitante || !values.licitante.trim()){ showAppAlert("Informe o Licitante (Cliente)."); return false; }
+      const statusAnterior = existing?.status || null;
       const item = {
         numero: values.numero.trim(),
         licitante: values.licitante.trim(),
@@ -2733,6 +2773,7 @@ function pedidosOpenForm(existingIndex){
         precoVenda: values.precoVenda,
         dataPedidoEmail: values.dataPedidoEmail,
         dataCompra: values.dataCompra,
+        dataEnvio: values.dataEnvio,
         comprado: !!values.comprado,
         status: values.status,
         observacao: values.observacao.trim(),
@@ -2754,7 +2795,7 @@ function pedidosOpenForm(existingIndex){
           const { error: delErr } = await sb.from("pedidos").delete().eq("id", newId);
           if(delErr) console.error(delErr);
         }
-        await pedidosLoad(); pedidosRender(""); pedidosRenderKpis();
+        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
         await planLoad(); planPopulateFornecedorFilter(); planRender("");
         document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
         document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
@@ -2763,14 +2804,38 @@ function pedidosOpenForm(existingIndex){
         return true;
       }
 
-      let error;
+      let error, savedId = existing?.id;
       if(existing){
         ({error} = await sb.from("pedidos").update(payload).eq("id", existing.id));
       } else {
-        ({error} = await sb.from("pedidos").insert(payload));
+        const ins = await sb.from("pedidos").insert(payload).select().single();
+        error = ins.error; savedId = ins.data?.id;
       }
       if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
-      await pedidosLoad(); pedidosRender(""); pedidosRenderKpis();
+
+      // Integração: pedido que passa a "Enviado" é duplicado para Licitações, mantendo os dados intactos
+      if(item.status === "Enviado" && statusAnterior !== "Enviado"){
+        const licPayload = {
+          empenho: item.empenho || null,
+          numero_pedido: item.numero || null,
+          data_envio: item.dataEnvio || null,
+          cliente_id: findIdByName(clientesData, item.licitante),
+          cliente_nome: item.licitante || null,
+          valor_compra: parseFloat(item.precoCompra && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoCompra)) : 0) || 0,
+          valor_receber_total: parseFloat(item.precoVenda && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoVenda)) : 0) || 0,
+          produto: item.material || null,
+          observacao_geral: item.observacao || null,
+        };
+        const { error: licErr } = await sb.from("licitacoes").insert(licPayload);
+        if(licErr){
+          console.error(licErr);
+          showAppAlert("Pedido salvo, mas houve erro ao duplicar para Licitações: "+licErr.message);
+        } else {
+          await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+        }
+      }
+
+      await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
       return true;
     }
   });
@@ -2778,6 +2843,8 @@ function pedidosOpenForm(existingIndex){
 
 document.getElementById("ped-add").addEventListener("click", ()=>pedidosOpenForm(null));
 document.getElementById("ped-search").addEventListener("input", e=>pedidosRender(e.target.value));
+document.getElementById("ped-fornecedor-filter").addEventListener("change", ()=>pedidosRender(document.getElementById("ped-search").value));
+document.getElementById("ped-status-filter").addEventListener("change", ()=>pedidosRender(document.getElementById("ped-search").value));
 document.querySelectorAll("#ped-subtabs .subtab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll("#ped-subtabs .subtab-btn").forEach(b=>b.classList.remove("active"));
@@ -3109,7 +3176,7 @@ async function initApp(){
 
     // 3) pedidos
     await pedidosLoad();
-    pedidosRender(""); pedidosRenderKpis();
+    pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
 
     // 4) planejamento (alimentado por pedidos "Selecionado pra compra")
     await planLoad();
