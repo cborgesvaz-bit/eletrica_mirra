@@ -829,9 +829,14 @@
         Cadastrar Cliente
       </button>
     </div>
+    <div class="toolbar" id="clientes-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="clientes-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <button class="btn secondary" id="clientes-bulk-delete">Excluir selecionados</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="clientes-select-all"></th>
           <th>Nome do Cliente</th><th>Ações</th>
         </tr></thead>
         <tbody id="clientes-body"></tbody>
@@ -852,9 +857,14 @@
         Cadastrar Fornecedor
       </button>
     </div>
+    <div class="toolbar" id="fornecedores-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="fornecedores-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <button class="btn secondary" id="fornecedores-bulk-delete">Excluir selecionados</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="fornecedores-select-all"></th>
           <th>Nome do Fornecedor</th><th>Ações</th>
         </tr></thead>
         <tbody id="fornecedores-body"></tbody>
@@ -875,9 +885,14 @@
         Cadastrar Produto
       </button>
     </div>
+    <div class="toolbar" id="produtos-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="produtos-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <button class="btn secondary" id="produtos-bulk-delete">Excluir selecionados</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="produtos-select-all"></th>
           <th>Nome do Produto</th><th>Observação</th><th>Ações</th>
         </tr></thead>
         <tbody id="produtos-body"></tbody>
@@ -919,6 +934,26 @@
     <div class="modal-foot">
       <button class="btn secondary" id="modal-cancel-btn">Cancelar</button>
       <button class="btn" id="modal-save-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SECUNDÁRIO (cadastro rápido — cliente/fornecedor/produto), empilhado sobre o modal principal -->
+<div class="modal-overlay" id="quickadd-modal-overlay" style="z-index:150;">
+  <div class="modal-card" style="max-width:440px;">
+    <div class="modal-head">
+      <h2 id="quickadd-modal-title-wrap"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span id="quickadd-modal-title">Novo Registro</span></h2>
+      <button class="modal-close" id="quickadd-modal-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="quickadd-modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn secondary" id="quickadd-modal-cancel-btn">Cancelar</button>
+      <button class="btn" id="quickadd-modal-save-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
         Salvar
       </button>
@@ -1408,12 +1443,47 @@ function statusClass(s){
 }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
+/* ============ SELEÇÃO EM LOTE (helper genérico p/ cadastros simples: clientes/fornecedores/produtos) ============ */
+function wireBulkDelete(prefix, tableName, getFilteredRows, reloadAndRender){
+  const selected = new Set();
+  function updateBar(){
+    const bar = document.getElementById(prefix+"-bulk-bar");
+    if(selected.size===0){ bar.style.display="none"; return; }
+    bar.style.display="flex";
+    document.getElementById(prefix+"-bulk-count").textContent = selected.size + " selecionado(s)";
+  }
+  document.getElementById(prefix+"-select-all").addEventListener("change", (e)=>{
+    const rows = getFilteredRows();
+    if(e.target.checked) rows.forEach(r=>selected.add(r.id));
+    else rows.forEach(r=>selected.delete(r.id));
+    reloadAndRender();
+  });
+  document.getElementById(prefix+"-bulk-delete").addEventListener("click", async ()=>{
+    if(selected.size===0) return;
+    if(!confirm(`Excluir ${selected.size} registro(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+    for(const id of [...selected]){
+      const { error } = await sb.from(tableName).delete().eq("id", id);
+      if(error){ console.error(error); showAppAlert("Erro ao excluir: "+error.message); continue; }
+      selected.delete(id);
+    }
+    await reloadAndRender();
+  });
+  return {
+    isSelected: id=>selected.has(id),
+    toggle: (id, checked)=>{ if(checked) selected.add(id); else selected.delete(id); updateBar(); },
+    pruneMissing: (validIds)=>{ [...selected].forEach(id=>{ if(!validIds.has(id)) selected.delete(id); }); },
+    updateBar,
+    syncSelectAll: (rows)=>{ document.getElementById(prefix+"-select-all").checked = rows.length>0 && rows.every(r=>selected.has(r.id)); }
+  };
+}
+
 /* ============ CLIENTES (cadastro) ============ */
 let clientesData = [];
 async function clientesLoad(){
   const { data, error } = await sb.from("clientes").select("*").order("nome");
   if(error){ console.error(error); clientesData = []; return; }
   clientesData = data || [];
+  clientesBulk.pruneMissing(new Set(clientesData.map(c=>c.id)));
 }
 function clientesRender(searchTerm){
   const tbody = document.getElementById("clientes-body");
@@ -1426,12 +1496,21 @@ function clientesRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 2;
+    td.colSpan = 3;
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><div>Nenhum cliente cadastrado ainda.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
   } else {
     rows.forEach(c=>{
       const tr = document.createElement("tr");
+      const tdChk = document.createElement("td");
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = clientesBulk.isSelected(c.id);
+      chk.addEventListener("change", ()=>{
+        clientesBulk.toggle(c.id, chk.checked);
+        clientesBulk.syncSelectAll(rows);
+      });
+      tdChk.appendChild(chk);
       const tdNome = document.createElement("td"); tdNome.textContent = c.nome;
       const tdAcao = document.createElement("td");
       const delBtn = document.createElement("button");
@@ -1445,10 +1524,12 @@ function clientesRender(searchTerm){
         }
       });
       tdAcao.appendChild(delBtn);
-      tr.append(tdNome, tdAcao);
+      tr.append(tdChk, tdNome, tdAcao);
       tbody.appendChild(tr);
     });
   }
+  clientesBulk.syncSelectAll(rows);
+  clientesBulk.updateBar();
 }
 function clientesRenderKpis(){
   document.getElementById("clientes-kpis").innerHTML = `
@@ -1464,8 +1545,8 @@ function refreshClientDatalist(){
   }
   dl.innerHTML = clientesData.map(c=>`<option value="${c.nome.replace(/"/g,'&quot;')}">`).join("");
 }
-function addClienteQuick(prefillName){
-  openModal({
+function addClienteQuick(prefillName, onCreated){
+  openQuickModal({
     title: "Cadastrar Cliente",
     icon: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>`,
     fields: [
@@ -1476,11 +1557,16 @@ function addClienteQuick(prefillName){
       const { error } = await sb.from("clientes").insert({nome:values.nome.trim()});
       if(error){ showAppAlert("Erro ao salvar cliente: "+error.message); return false; }
       await clientesLoad(); clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
+      if(onCreated) onCreated(values.nome.trim());
       return true;
     }
   });
 }
 document.getElementById("clientes-add").addEventListener("click", ()=>addClienteQuick(""));
+const clientesBulk = wireBulkDelete("clientes", "clientes", ()=>{
+  const s = document.getElementById("clientes-search").value.trim().toLowerCase();
+  return s ? clientesData.filter(c=>c.nome.toLowerCase().includes(s)) : clientesData;
+}, async ()=>{ await clientesLoad(); clientesRender(document.getElementById("clientes-search").value); clientesRenderKpis(); refreshClientDatalist(); });
 document.getElementById("clientes-search").addEventListener("input", e=>clientesRender(e.target.value));
 
 /* ============ FORNECEDORES (cadastro) ============ */
@@ -1489,6 +1575,7 @@ async function fornecedoresLoad(){
   const { data, error } = await sb.from("fornecedores").select("*").order("nome");
   if(error){ console.error(error); fornecedoresData = []; return; }
   fornecedoresData = data || [];
+  fornecedoresBulk.pruneMissing(new Set(fornecedoresData.map(f=>f.id)));
 }
 function fornecedoresRender(searchTerm){
   const tbody = document.getElementById("fornecedores-body");
@@ -1501,12 +1588,21 @@ function fornecedoresRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 2;
+    td.colSpan = 3;
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg><div>Nenhum fornecedor cadastrado ainda.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
   } else {
     rows.forEach(f=>{
       const tr = document.createElement("tr");
+      const tdChk = document.createElement("td");
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = fornecedoresBulk.isSelected(f.id);
+      chk.addEventListener("change", ()=>{
+        fornecedoresBulk.toggle(f.id, chk.checked);
+        fornecedoresBulk.syncSelectAll(rows);
+      });
+      tdChk.appendChild(chk);
       const tdNome = document.createElement("td"); tdNome.textContent = f.nome;
       const tdAcao = document.createElement("td");
       const delBtn = document.createElement("button");
@@ -1520,10 +1616,12 @@ function fornecedoresRender(searchTerm){
         }
       });
       tdAcao.appendChild(delBtn);
-      tr.append(tdNome, tdAcao);
+      tr.append(tdChk, tdNome, tdAcao);
       tbody.appendChild(tr);
     });
   }
+  fornecedoresBulk.syncSelectAll(rows);
+  fornecedoresBulk.updateBar();
 }
 function fornecedoresRenderKpis(){
   document.getElementById("fornecedores-kpis").innerHTML = `
@@ -1539,8 +1637,8 @@ function refreshFornecedorDatalist(){
   }
   dl.innerHTML = fornecedoresData.map(f=>`<option value="${f.nome.replace(/"/g,'&quot;')}">`).join("");
 }
-function addFornecedorQuick(prefillName){
-  openModal({
+function addFornecedorQuick(prefillName, onCreated){
+  openQuickModal({
     title: "Cadastrar Fornecedor",
     icon: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>`,
     fields: [
@@ -1551,11 +1649,16 @@ function addFornecedorQuick(prefillName){
       const { error } = await sb.from("fornecedores").insert({nome:values.nome.trim()});
       if(error){ showAppAlert("Erro ao salvar fornecedor: "+error.message); return false; }
       await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
+      if(onCreated) onCreated(values.nome.trim());
       return true;
     }
   });
 }
 document.getElementById("fornecedores-add").addEventListener("click", ()=>addFornecedorQuick(""));
+const fornecedoresBulk = wireBulkDelete("fornecedores", "fornecedores", ()=>{
+  const s = document.getElementById("fornecedores-search").value.trim().toLowerCase();
+  return s ? fornecedoresData.filter(f=>f.nome.toLowerCase().includes(s)) : fornecedoresData;
+}, async ()=>{ await fornecedoresLoad(); fornecedoresRender(document.getElementById("fornecedores-search").value); fornecedoresRenderKpis(); refreshFornecedorDatalist(); });
 document.getElementById("fornecedores-search").addEventListener("input", e=>fornecedoresRender(e.target.value));
 
 /* ============ PRODUTOS (cadastro) ============ */
@@ -1564,6 +1667,7 @@ async function produtosLoad(){
   const { data, error } = await sb.from("produtos").select("*").order("nome");
   if(error){ console.error(error); produtosData = []; return; }
   produtosData = data || [];
+  produtosBulk.pruneMissing(new Set(produtosData.map(p=>p.id)));
 }
 function produtosRender(searchTerm){
   const tbody = document.getElementById("produtos-body");
@@ -1576,12 +1680,21 @@ function produtosRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 3;
+    td.colSpan = 4;
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><div>Nenhum produto cadastrado ainda.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
   } else {
     rows.forEach(p=>{
       const tr = document.createElement("tr");
+      const tdChk = document.createElement("td");
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = produtosBulk.isSelected(p.id);
+      chk.addEventListener("change", ()=>{
+        produtosBulk.toggle(p.id, chk.checked);
+        produtosBulk.syncSelectAll(rows);
+      });
+      tdChk.appendChild(chk);
       const tdNome = document.createElement("td"); tdNome.textContent = p.nome;
       const tdObs = document.createElement("td"); tdObs.textContent = p.observacao || "";
       const tdAcao = document.createElement("td");
@@ -1596,10 +1709,12 @@ function produtosRender(searchTerm){
         }
       });
       tdAcao.appendChild(delBtn);
-      tr.append(tdNome, tdObs, tdAcao);
+      tr.append(tdChk, tdNome, tdObs, tdAcao);
       tbody.appendChild(tr);
     });
   }
+  produtosBulk.syncSelectAll(rows);
+  produtosBulk.updateBar();
 }
 function produtosRenderKpis(){
   document.getElementById("produtos-kpis").innerHTML = `
@@ -1615,8 +1730,8 @@ function refreshProdutoDatalist(){
   }
   dl.innerHTML = produtosData.map(p=>`<option value="${p.nome.replace(/"/g,'&quot;')}">`).join("");
 }
-function addProdutoQuick(prefillName){
-  openModal({
+function addProdutoQuick(prefillName, onCreated){
+  openQuickModal({
     title: "Cadastrar Produto",
     icon: `<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>`,
     fields: [
@@ -1631,11 +1746,16 @@ function addProdutoQuick(prefillName){
       });
       if(error){ showAppAlert("Erro ao salvar produto: "+error.message); return false; }
       await produtosLoad(); produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
+      if(onCreated) onCreated(values.nome.trim());
       return true;
     }
   });
 }
 document.getElementById("produtos-add").addEventListener("click", ()=>addProdutoQuick(""));
+const produtosBulk = wireBulkDelete("produtos", "produtos", ()=>{
+  const s = document.getElementById("produtos-search").value.trim().toLowerCase();
+  return s ? produtosData.filter(p=>p.nome.toLowerCase().includes(s)) : produtosData;
+}, async ()=>{ await produtosLoad(); produtosRender(document.getElementById("produtos-search").value); produtosRenderKpis(); refreshProdutoDatalist(); });
 document.getElementById("produtos-search").addEventListener("input", e=>produtosRender(e.target.value));
 
 /* ============ MODAL DE AVISO/ERRO (substitui showAppAlert() nativo) ============ */
@@ -1778,7 +1898,10 @@ function openModal({title, icon, fields, onSave, onInput}){
       qa.className = "client-quickadd";
       qa.innerHTML = `<button type="button"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo ${entityLabel}</button>`;
       qa.querySelector("button").addEventListener("click", ()=>{
-        quickAddHandlers[f.quickAdd](input.value);
+        quickAddHandlers[f.quickAdd](input.value, (novoNome)=>{
+          input.value = novoNome;
+          input.dispatchEvent(new Event("input", {bubbles:true}));
+        });
       });
       wrap.appendChild(qa);
     }
@@ -1833,6 +1956,62 @@ document.getElementById("modal-cancel-btn").addEventListener("click", closeModal
 document.getElementById("modal-close-btn").addEventListener("click", closeModal);
 modalOverlay.addEventListener("click", (e)=>{ if(e.target === modalOverlay) closeModal(); });
 document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && modalOverlay.classList.contains("active")) closeModal(); });
+
+/* ============ MODAL SECUNDÁRIO (cadastro rápido — empilhado sobre o modal principal) ============ */
+// Overlay independente: nunca toca no estado (modalOnSave/modalOnInput/DOM) do modal principal,
+// então abrir "Cadastrar novo cliente/fornecedor/produto" a partir de um modal já aberto (ex: Novo Pedido)
+// não fecha nem perde os dados do modal de origem.
+const quickModalOverlay = document.getElementById("quickadd-modal-overlay");
+const quickModalBody = document.getElementById("quickadd-modal-body");
+const quickModalTitle = document.getElementById("quickadd-modal-title");
+const quickModalTitleWrap = document.getElementById("quickadd-modal-title-wrap");
+let quickModalOnSave = null;
+function openQuickModal({title, icon, fields, onSave}){
+  quickModalTitle.textContent = title;
+  quickModalTitleWrap.querySelector("svg").outerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon||'<path d="M12 5v14M5 12h14"/>'}</svg>`;
+  quickModalBody.innerHTML = "";
+  fields.forEach(f=>{
+    const wrap = document.createElement("div");
+    wrap.className = "field" + (f.full ? " full" : "");
+    const label = document.createElement("label");
+    label.textContent = f.label;
+    label.setAttribute("for", "quickadd-modal-field-"+f.key);
+    wrap.appendChild(label);
+    const input = f.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+    if(f.type !== "textarea") input.type = "text";
+    input.id = "quickadd-modal-field-"+f.key;
+    input.dataset.key = f.key;
+    if(f.value !== undefined) input.value = f.value;
+    wrap.appendChild(input);
+    quickModalBody.appendChild(wrap);
+  });
+  quickModalOnSave = async ()=>{
+    const values = {};
+    fields.forEach(f=>{ values[f.key] = document.getElementById("quickadd-modal-field-"+f.key).value; });
+    const saveBtn = document.getElementById("quickadd-modal-save-btn");
+    saveBtn.disabled = true; saveBtn.style.opacity = "0.6";
+    try{
+      const ok = await onSave(values);
+      if(ok !== false) closeQuickModal();
+    } catch(err){
+      console.error(err);
+      showAppAlert("Erro ao salvar: " + (err?.message || err));
+    } finally {
+      saveBtn.disabled = false; saveBtn.style.opacity = "";
+    }
+  };
+  quickModalOverlay.classList.add("active");
+  setTimeout(()=>{ const first = quickModalBody.querySelector("input,textarea"); if(first) first.focus(); }, 50);
+}
+function closeQuickModal(){
+  quickModalOverlay.classList.remove("active");
+  quickModalOnSave = null;
+}
+document.getElementById("quickadd-modal-save-btn").addEventListener("click", ()=>{ if(quickModalOnSave) quickModalOnSave(); });
+document.getElementById("quickadd-modal-cancel-btn").addEventListener("click", closeQuickModal);
+document.getElementById("quickadd-modal-close-btn").addEventListener("click", closeQuickModal);
+quickModalOverlay.addEventListener("click", (e)=>{ if(e.target === quickModalOverlay) closeQuickModal(); });
+document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && quickModalOverlay.classList.contains("active")) closeQuickModal(); });
 
 /* ============ LICITAÇÕES ============ */
 const LIC_COLUMNS = [
