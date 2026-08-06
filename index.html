@@ -1774,7 +1774,10 @@ function licCompute(values){
   // demais campos sem descontar Caixa Adm (considerado 0 nesse caso).
   const caixaAdmUsado = caixaAdmPreenchido ? licParseNum(caixaAdmRaw) : 0;
   const lucro = totalReceber - valorCompra - imposto - frete - caixaAdmUsado;
-  const pct = valorCompra !== 0 ? (lucro/valorCompra) : 0;
+  // % de Lucro = Lucro / Custo Total (Compra + Imposto + Frete + Caixa ADM)
+  // OBS: NÃO é lucro/valorCompra — essa era a causa do valor exibido divergir do calculado manualmente.
+  const custoTotal = valorCompra + imposto + frete + caixaAdmUsado;
+  const pct = custoTotal !== 0 ? (lucro/custoTotal) : 0;
   const cra = lucro * 0.225;
   const cbva = lucro * 0.225;
   const rlv = lucro * 0.45;
@@ -2135,21 +2138,28 @@ function renderMensal(){
     if(!d || !/^\d{4}-\d{2}/.test(d)) return;
     if(yearFilter && d.substring(0,4) !== yearFilter) return;
     const key = d.substring(0,7);
-    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, imposto:0, frete:0, caixaAdm:0, lucroReceber:0, percLucroSoma:0, percLucroCount:0, lucroCRA:0, lucroCBVA:0, lucroRLV:0, lucroLBV:0, count:0, recebidos:0, pagos:0};
-    byMonth[key].compra += parseFloat(r["Valor Compra"])||0;
-    byMonth[key].receber += parseFloat(r["Valor a Receber - TOTAL"])||0;
-    byMonth[key].imposto += parseFloat(r["IMPOSTO"])||0;
-    byMonth[key].frete += parseFloat(r["FRETE"])||0;
-    byMonth[key].caixaAdm += parseFloat(r["CAIXA ADM"])||0;
-    byMonth[key].lucroReceber += parseFloat(r["LUCRO a Receber"])||0;
-    if(r["% de LUCRO"] !== "" && r["% de LUCRO"] !== null && r["% de LUCRO"] !== undefined && !isNaN(parseFloat(r["% de LUCRO"]))){
-      byMonth[key].percLucroSoma += parseFloat(r["% de LUCRO"]);
-      byMonth[key].percLucroCount += 1;
-    }
-    byMonth[key].lucroCRA += parseFloat(r["Lucro - CRA"])||0;
-    byMonth[key].lucroCBVA += parseFloat(r["Lucro - CBVA"])||0;
-    byMonth[key].lucroRLV += parseFloat(r["Lucro - RLV"])||0;
-    byMonth[key].lucroLBV += parseFloat(r["Lucro LBV"])||0;
+    if(!byMonth[key]) byMonth[key] = {compra:0, receber:0, lucro:0, count:0, recebidos:0, pagos:0, imposto:0, frete:0, caixaAdm:0, cra:0, cbva:0, rlv:0, lbv:0};
+    // Usa os valores já calculados/salvos no registro; se algum campo calculado estiver
+    // ausente (registro antigo/incompleto), recalcula com licCompute para não distorcer o total.
+    const c = licCompute(r);
+    const imposto = r["IMPOSTO"]!==undefined && r["IMPOSTO"]!=="" ? licParseNum(r["IMPOSTO"]) : c.imposto;
+    const frete = licParseNum(r["FRETE"]);
+    const caixaAdm = r["CAIXA ADM"]!==undefined && r["CAIXA ADM"]!=="" ? licParseNum(r["CAIXA ADM"]) : 0;
+    const lucro = r["LUCRO a Receber"]!==undefined && r["LUCRO a Receber"]!=="" ? licParseNum(r["LUCRO a Receber"]) : c.lucro;
+    const cra = r["Lucro - CRA"]!==undefined && r["Lucro - CRA"]!=="" ? licParseNum(r["Lucro - CRA"]) : c.cra;
+    const cbva = r["Lucro - CBVA"]!==undefined && r["Lucro - CBVA"]!=="" ? licParseNum(r["Lucro - CBVA"]) : c.cbva;
+    const rlv = r["Lucro - RLV"]!==undefined && r["Lucro - RLV"]!=="" ? licParseNum(r["Lucro - RLV"]) : c.rlv;
+    const lbv = r["Lucro LBV"]!==undefined && r["Lucro LBV"]!=="" ? licParseNum(r["Lucro LBV"]) : c.lbv;
+    byMonth[key].compra += licParseNum(r["Valor Compra"]);
+    byMonth[key].receber += licParseNum(r["Valor a Receber - TOTAL"]);
+    byMonth[key].lucro += lucro;
+    byMonth[key].imposto += imposto;
+    byMonth[key].frete += frete;
+    byMonth[key].caixaAdm += caixaAdm;
+    byMonth[key].cra += cra;
+    byMonth[key].cbva += cbva;
+    byMonth[key].rlv += rlv;
+    byMonth[key].lbv += lbv;
     byMonth[key].count += 1;
     if(statusClass(r["Status de PGTO"])==="recebido") byMonth[key].recebidos += 1;
     if(r["Data de Pagamento"]) byMonth[key].pagos += 1;
@@ -2163,6 +2173,10 @@ function renderMensal(){
   grid.innerHTML = months.map(m=>{
     const [y,mm] = m.split("-");
     const d = byMonth[m];
+    // % Lucro do mês = Lucro / Custo Total do mês (Compra + Imposto + Frete + Caixa ADM),
+    // mesma lógica corrigida usada em licCompute — nunca lucro/valorCompra.
+    const custoTotalMes = d.compra + d.imposto + d.frete + d.caixaAdm;
+    const pctMes = custoTotalMes !== 0 ? (d.lucro/custoTotalMes) : 0;
     return `<div class="month-card">
       <h3><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" stroke="var(--yellow)"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${monthNames[mm]||mm} ${y}</h3>
       <div class="row"><span>Registros</span><b>${d.count}</b></div>
@@ -2173,12 +2187,12 @@ function renderMensal(){
       <div class="row"><span>Imposto</span><b>${fmtCurrency(d.imposto)}</b></div>
       <div class="row"><span>Frete</span><b>${fmtCurrency(d.frete)}</b></div>
       <div class="row"><span>Caixa ADM</span><b>${fmtCurrency(d.caixaAdm)}</b></div>
-      <div class="row"><span>Lucro a Receber</span><b style="color:${d.lucroReceber<0?'var(--neg)':'var(--pos)'}">${fmtCurrency(d.lucroReceber)}</b></div>
-      <div class="row"><span>% Lucro</span><b style="color:${d.lucroReceber<0?'var(--neg)':'var(--pos)'}">${d.percLucroCount?((d.percLucroSoma/d.percLucroCount)*100).toFixed(2):'0.00'}%</b></div>
-      <div class="row"><span>Lucro CRA</span><b>${fmtCurrency(d.lucroCRA)}</b></div>
-      <div class="row"><span>Lucro CBVA</span><b>${fmtCurrency(d.lucroCBVA)}</b></div>
-      <div class="row"><span>Lucro RLV</span><b>${fmtCurrency(d.lucroRLV)}</b></div>
-      <div class="row"><span>Lucro LBV</span><b>${fmtCurrency(d.lucroLBV)}</b></div>
+      <div class="row"><span>Lucro a Receber</span><b style="color:${d.lucro<0?'var(--neg)':'var(--pos)'}">${fmtCurrency(d.lucro)}</b></div>
+      <div class="row"><span>% Lucro</span><b style="color:${pctMes<0?'var(--neg)':'var(--pos)'}">${fmtPercent(pctMes)}</b></div>
+      <div class="row"><span>Lucro CRA</span><b>${fmtCurrency(d.cra)}</b></div>
+      <div class="row"><span>Lucro CBVA</span><b>${fmtCurrency(d.cbva)}</b></div>
+      <div class="row"><span>Lucro RLV</span><b>${fmtCurrency(d.rlv)}</b></div>
+      <div class="row"><span>Lucro LBV</span><b>${fmtCurrency(d.lbv)}</b></div>
     </div>`;
   }).join("");
 }
