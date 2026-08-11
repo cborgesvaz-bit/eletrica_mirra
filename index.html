@@ -3158,12 +3158,16 @@ function pedItemRowTemplate(seq){
         <input type="text" data-f="fornecedor" autocomplete="off">
         <div class="client-quickadd"><button type="button" data-qa="fornecedor"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo fornecedor</button></div>
       </div>
+      <div class="field" style="margin:0 0 14px;">
+        <label>Nº Empenho</label>
+        <input type="text" data-f="empenho">
+      </div>
       <div class="field full" style="margin:0 0 14px;">
         <label>Produto</label>
         <input type="text" data-f="material" autocomplete="off">
         <div class="client-quickadd"><button type="button" data-qa="produto"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo produto</button></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px;">
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px;margin-bottom:14px;">
         <div class="field" style="margin:0;">
           <label>Quantidade</label>
           <input type="number" step="0.01" data-f="quantidade">
@@ -3176,6 +3180,54 @@ function pedItemRowTemplate(seq){
           <label>Preço Venda (R$)</label>
           <input type="number" step="0.01" data-f="precoVenda">
         </div>
+        <div class="field" style="margin:0;">
+          <label>Data Pedido Email</label>
+          <input type="date" data-f="dataPedidoEmail">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Data da Compra</label>
+          <input type="date" data-f="dataCompra">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Prazo Máximo Envio (+30 dias)</label>
+          <input type="text" data-disp="prazoMaximoEnvio" readonly value="">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Data Envio</label>
+          <input type="date" data-f="dataEnvio">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Status</label>
+          <select data-f="status">
+            <option value="À enviar">À enviar</option>
+            <option value="Comprado">Comprado</option>
+            <option value="Enviado">Enviado</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Valor Total da Compra</label>
+          <input type="text" data-disp="valorTotalCompra" readonly value="R$ 0,00">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Valor Total da Venda</label>
+          <input type="text" data-disp="valorTotalVenda" readonly value="R$ 0,00">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Lucro Bruto</label>
+          <input type="text" data-disp="lucroBruto" readonly value="R$ 0,00">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>% Lucro Bruto</label>
+          <input type="text" data-disp="percentLucroBruto" readonly value="0%">
+        </div>
+      </div>
+      <div class="field checkbox-field" style="margin:0 0 14px;">
+        <input type="checkbox" data-f="comprado" id="pedmulti-comprado-${seq}">
+        <label for="pedmulti-comprado-${seq}">Produto já foi comprado?</label>
+      </div>
+      <div class="field full" style="margin:0;">
+        <label>Observação</label>
+        <textarea data-f="observacao"></textarea>
       </div>
     </div>`;
 }
@@ -3192,12 +3244,8 @@ function pedidosOpenMultiForm(){
       <div class="client-quickadd"><button type="button" id="pedmulti-licitante-qa"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo cliente</button></div>
     </div>
     <div class="field"><label>Nº Pedido</label><input type="text" id="pedmulti-numero"></div>
-    <div class="field"><label>Nº Empenho</label><input type="text" id="pedmulti-empenho"></div>
-    <div class="field"><label>Data Pedido Email</label><input type="date" id="pedmulti-dataPedidoEmail"></div>
-    <div class="field"><label>Data da Compra</label><input type="date" id="pedmulti-dataCompra"></div>
-    <div class="field"><label>Data Envio</label><input type="date" id="pedmulti-dataEnvio"></div>
     <div class="field full">
-      <label style="font-weight:700;">Produtos deste Pedido <span style="font-weight:400;color:var(--muted);">— podem ser de fornecedores diferentes; cada um vira um item gerenciável separadamente</span></label>
+      <label style="font-weight:700;">Produtos deste Pedido <span style="font-weight:400;color:var(--muted);">— podem ser de fornecedores diferentes; cada um vira um item gerenciável separadamente, com seus próprios dados, datas, status e observação</span></label>
     </div>
     <div class="field full" id="pedmulti-items" style="display:flex;flex-direction:column;gap:18px;padding-bottom:4px;"></div>
     <div class="field full" style="margin-top:-8px;">
@@ -3206,7 +3254,6 @@ function pedidosOpenMultiForm(){
         Adicionar produto
       </button>
     </div>
-    <div class="field full"><label>Observação</label><textarea id="pedmulti-observacao"></textarea></div>
   `;
   const itemsWrap = document.getElementById("pedmulti-items");
   function addItemRow(){
@@ -3227,6 +3274,32 @@ function pedidosOpenMultiForm(){
     row.querySelector('[data-qa="produto"]').addEventListener("click", ()=>{
       addProdutoQuick(materialInput.value, (nome)=>{ materialInput.value = nome; });
     });
+    const compradoChk = row.querySelector('[data-f="comprado"]');
+    const statusSel = row.querySelector('[data-f="status"]');
+    function recompute(){
+      const values = {
+        quantidade: row.querySelector('[data-f="quantidade"]').value,
+        precoCompra: row.querySelector('[data-f="precoCompra"]').value,
+        precoVenda: row.querySelector('[data-f="precoVenda"]').value,
+        dataPedidoEmail: row.querySelector('[data-f="dataPedidoEmail"]').value,
+      };
+      const c = pedidosCompute(values);
+      row.querySelector('[data-disp="prazoMaximoEnvio"]').value = fmtDateBR(c.prazo);
+      row.querySelector('[data-disp="valorTotalCompra"]').value = fmtCurrency(c.totalCompra);
+      row.querySelector('[data-disp="valorTotalVenda"]').value = fmtCurrency(c.totalVenda);
+      row.querySelector('[data-disp="lucroBruto"]').value = fmtCurrency(c.lucro);
+      row.querySelector('[data-disp="percentLucroBruto"]').value = fmtPercent(c.pct);
+    }
+    row.addEventListener("input", (e)=>{
+      recompute();
+      if(e.target === compradoChk){
+        if(compradoChk.checked && statusSel.value !== "Enviado") statusSel.value = "Comprado";
+        else if(!compradoChk.checked && statusSel.value === "Comprado") statusSel.value = "À enviar";
+      } else if(e.target === statusSel){
+        compradoChk.checked = statusSel.value === "Comprado" || statusSel.value === "Enviado";
+      }
+    });
+    recompute();
   }
   addItemRow();
   document.getElementById("pedmulti-add-item").addEventListener("click", addItemRow);
@@ -3239,29 +3312,27 @@ function pedidosOpenMultiForm(){
   modalOnSave = async ()=>{
     const licitante = document.getElementById("pedmulti-licitante").value.trim();
     if(!licitante){ showAppAlert("Informe o Licitante (Cliente)."); return; }
-    const header = {
-      numero: document.getElementById("pedmulti-numero").value.trim(),
-      licitante,
-      empenho: document.getElementById("pedmulti-empenho").value.trim(),
-      dataPedidoEmail: document.getElementById("pedmulti-dataPedidoEmail").value,
-      dataCompra: document.getElementById("pedmulti-dataCompra").value,
-      dataEnvio: document.getElementById("pedmulti-dataEnvio").value,
-      observacao: document.getElementById("pedmulti-observacao").value.trim(),
-    };
+    const numero = document.getElementById("pedmulti-numero").value.trim();
     const rows = [...itemsWrap.querySelectorAll(".ped-item-row")];
     const payloads = [];
     for(const row of rows){
       const material = row.querySelector('[data-f="material"]').value.trim();
       if(!material) continue; // ignora linhas em branco
       const item = {
-        ...header,
+        numero,
+        licitante,
         fornecedor: row.querySelector('[data-f="fornecedor"]').value.trim(),
+        empenho: row.querySelector('[data-f="empenho"]').value.trim(),
         material,
         quantidade: row.querySelector('[data-f="quantidade"]').value,
         precoCompra: row.querySelector('[data-f="precoCompra"]').value,
         precoVenda: row.querySelector('[data-f="precoVenda"]').value,
-        comprado: false,
-        status: "À enviar",
+        dataPedidoEmail: row.querySelector('[data-f="dataPedidoEmail"]').value,
+        dataCompra: row.querySelector('[data-f="dataCompra"]').value,
+        dataEnvio: row.querySelector('[data-f="dataEnvio"]').value,
+        comprado: row.querySelector('[data-f="comprado"]').checked,
+        status: row.querySelector('[data-f="status"]').value,
+        observacao: row.querySelector('[data-f="observacao"]').value.trim(),
       };
       payloads.push(pedidosToDbPayload(item));
     }
