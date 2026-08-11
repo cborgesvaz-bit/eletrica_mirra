@@ -3109,30 +3109,34 @@ function pedidosRenderKpis(){
 let pedItemRowSeq = 0;
 function pedItemRowTemplate(seq){
   return `
-    <div class="ped-item-row" data-seq="${seq}" style="display:grid;grid-template-columns:1.3fr 1.3fr 0.7fr 0.9fr 0.9fr auto;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line);">
-      <div class="field" style="margin:0;">
-        <label style="font-size:11px;">Fornecedor</label>
-        <input type="text" data-f="fornecedor" list="fornecedores-datalist" autocomplete="off">
-        <div class="client-quickadd" style="margin-top:4px;"><button type="button" data-qa="fornecedor" style="font-size:11px;padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M12 5v14M5 12h14"/></svg>Novo fornecedor</button></div>
+    <div class="ped-item-row" data-seq="${seq}" style="grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:16px;position:relative;">
+      <button type="button" class="icon-btn ped-item-remove" title="Remover produto" style="position:absolute;top:10px;right:10px;padding:6px;">${iconTrash}</button>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px;padding-right:36px;">
+        <div class="field" style="margin:0;">
+          <label>Fornecedor</label>
+          <input type="text" data-f="fornecedor" list="fornecedores-datalist" autocomplete="off">
+          <div class="client-quickadd" style="margin-top:4px;"><button type="button" data-qa="fornecedor" style="font-size:11px;padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M12 5v14M5 12h14"/></svg>Novo fornecedor</button></div>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Produto</label>
+          <input type="text" data-f="material" list="produtos-datalist" autocomplete="off">
+          <div class="client-quickadd" style="margin-top:4px;"><button type="button" data-qa="produto" style="font-size:11px;padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M12 5v14M5 12h14"/></svg>Novo produto</button></div>
+        </div>
+        <div class="field" style="margin:0;grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:14px 16px;">
+          <div class="field" style="margin:0;">
+            <label>Qtd</label>
+            <input type="number" step="0.01" data-f="quantidade">
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Preço Compra</label>
+            <input type="number" step="0.01" data-f="precoCompra">
+          </div>
+          <div class="field" style="margin:0;">
+            <label>Preço Venda</label>
+            <input type="number" step="0.01" data-f="precoVenda">
+          </div>
+        </div>
       </div>
-      <div class="field" style="margin:0;">
-        <label style="font-size:11px;">Produto</label>
-        <input type="text" data-f="material" list="produtos-datalist" autocomplete="off">
-        <div class="client-quickadd" style="margin-top:4px;"><button type="button" data-qa="produto" style="font-size:11px;padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M12 5v14M5 12h14"/></svg>Novo produto</button></div>
-      </div>
-      <div class="field" style="margin:0;">
-        <label style="font-size:11px;">Qtd</label>
-        <input type="number" step="0.01" data-f="quantidade">
-      </div>
-      <div class="field" style="margin:0;">
-        <label style="font-size:11px;">Preço Compra</label>
-        <input type="number" step="0.01" data-f="precoCompra">
-      </div>
-      <div class="field" style="margin:0;">
-        <label style="font-size:11px;">Preço Venda</label>
-        <input type="number" step="0.01" data-f="precoVenda">
-      </div>
-      <button type="button" class="icon-btn ped-item-remove" title="Remover produto" style="height:38px;">${iconTrash}</button>
     </div>`;
 }
 function pedidosOpenMultiForm(){
@@ -3155,7 +3159,7 @@ function pedidosOpenMultiForm(){
     <div class="field full">
       <label style="font-weight:700;">Produtos deste Pedido <span style="font-weight:400;color:var(--muted);">— podem ser de fornecedores diferentes; cada um vira um item gerenciável separadamente</span></label>
     </div>
-    <div class="field full" id="pedmulti-items"></div>
+    <div class="field full" id="pedmulti-items" style="display:flex;flex-direction:column;gap:12px;"></div>
     <div class="field full" style="margin-top:-8px;">
       <button type="button" class="btn secondary" id="pedmulti-add-item">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
