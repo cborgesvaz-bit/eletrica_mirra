@@ -792,6 +792,7 @@
 
   <!-- PLANEJAMENTO -->
   <section id="view-planejamento" class="view">
+    <div class="kpis" id="plan-fornecedor-summary"></div>
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -3580,6 +3581,7 @@ function planToDbPayload(item){
 function planFromDbRow(r){
   return {
     id: r.id,
+    pedidoOrigemId: r.pedido_origem_id || null,
     fornecedor: r.fornecedor_nome || "",
     produto: r.produto_nome || "",
     quantidade: r.quantidade,
@@ -3600,6 +3602,23 @@ function planCompute(values){
   const pu = parseFloat(values.precoUnitario) || 0;
   return { valorTotal: q*pu };
 }
+function planRenderFornecedorSummary(){
+  const wrap = document.getElementById("plan-fornecedor-summary");
+  if(!wrap) return;
+  const totals = new Map();
+  planData.forEach(p=>{
+    const key = p.fornecedor || "Sem fornecedor";
+    const totalCompra = (parseFloat(p.quantidade)||0) * (parseFloat(p.precoCompra)||0);
+    totals.set(key, (totals.get(key)||0) + totalCompra);
+  });
+  if(totals.size === 0){ wrap.innerHTML = ""; return; }
+  const entries = [...totals.entries()].sort((a,b)=>b[1]-a[1]);
+  wrap.innerHTML = entries.map(([fornecedor, total])=>`
+    <div class="kpi">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg></div>
+      <div><div class="label">${fornecedor}</div><div class="value">${fmtCurrency(total)}</div></div>
+    </div>`).join("");
+}
 function planPopulateFornecedorFilter(){
   const sel = document.getElementById("plan-fornecedor-filter");
   const fornecedores = new Set(planData.map(p=>p.fornecedor).filter(Boolean));
@@ -3619,6 +3638,7 @@ function planUpdateBulkBar(){
   document.getElementById("plan-bulk-count").textContent = n + " selecionado(s)";
 }
 function planRender(searchTerm){
+  planRenderFornecedorSummary();
   const tbody = document.getElementById("plan-body");
   tbody.innerHTML = "";
   const fornecedorFilter = document.getElementById("plan-fornecedor-filter").value;
@@ -3711,7 +3731,7 @@ function planOpenForm(existingIndex){
 
       // Selecionar um status aqui devolve o item para a tela de Pedidos com o status escolhido
       if(values.statusPedido && values.statusPedido !== "Manter em Planejamento"){
-        const pedidoPayload = {
+        const camposAtualizados = {
           fornecedor_nome: values.fornecedor.trim() || null,
           fornecedor_id: findIdByName(fornecedoresData, values.fornecedor),
           material: values.produto.trim() || null,
@@ -3722,8 +3742,16 @@ function planOpenForm(existingIndex){
           status: values.statusPedido,
           comprado: values.statusPedido === "Comprado" || values.statusPedido === "Enviado",
         };
-        const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
-        if(insErr){ showAppAlert("Erro ao devolver para Pedidos: "+insErr.message); return false; }
+        // Se o item de planejamento se originou de um pedido (pedido_origem_id), atualizamos
+        // o pedido original em vez de criar um novo — preservando licitante, número, empenho,
+        // datas e observação que já estavam salvos nele.
+        if(existing?.pedidoOrigemId){
+          const { error: updErr } = await sb.from("pedidos").update(camposAtualizados).eq("id", existing.pedidoOrigemId);
+          if(updErr){ showAppAlert("Erro ao devolver para Pedidos: "+updErr.message); return false; }
+        } else {
+          const { error: insErr } = await sb.from("pedidos").insert(camposAtualizados);
+          if(insErr){ showAppAlert("Erro ao devolver para Pedidos: "+insErr.message); return false; }
+        }
         if(existing){
           const { error: delErr } = await sb.from("planejamento").delete().eq("id", existing.id);
           if(delErr) console.error(delErr);
@@ -3822,7 +3850,7 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
   const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
   if(!confirm(`Mover ${selecionados.length} item(ns) para Pedidos com status "${status}"?`)) return;
   for(const p of selecionados){
-    const pedidoPayload = {
+    const camposAtualizados = {
       fornecedor_nome: p.fornecedor || null,
       fornecedor_id: findIdByName(fornecedoresData, p.fornecedor),
       material: p.produto || null,
@@ -3833,8 +3861,15 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
       status: status,
       comprado: status === "Comprado" || status === "Enviado",
     };
-    const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
-    if(insErr){ console.error(insErr); showAppAlert("Erro ao devolver item para Pedidos: "+insErr.message); continue; }
+    // Preserva os dados do pedido original (licitante, número, empenho, datas, observação)
+    // atualizando-o em vez de criar um novo registro, quando houver origem rastreada.
+    let opErr;
+    if(p.pedidoOrigemId){
+      ({error: opErr} = await sb.from("pedidos").update(camposAtualizados).eq("id", p.pedidoOrigemId));
+    } else {
+      ({error: opErr} = await sb.from("pedidos").insert(camposAtualizados));
+    }
+    if(opErr){ console.error(opErr); showAppAlert("Erro ao devolver item para Pedidos: "+opErr.message); continue; }
     const { error: delErr } = await sb.from("planejamento").delete().eq("id", p.id);
     if(delErr) console.error(delErr);
     planSelectedIds.delete(p.id);
