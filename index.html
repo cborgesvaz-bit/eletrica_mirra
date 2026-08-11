@@ -745,9 +745,25 @@
         Novo Pedido
       </button>
     </div>
+    <div class="toolbar" id="ped-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="ped-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <select id="ped-bulk-status">
+        <option value="">Alterar status para...</option>
+        <option value="À enviar">À enviar</option>
+        <option value="Comprado">Comprado</option>
+        <option value="Enviado">Enviado</option>
+      </select>
+      <button class="btn secondary" id="ped-bulk-apply-status">Aplicar status</button>
+      <input type="date" id="ped-bulk-data-compra" style="max-width:170px;" title="Definir Data da Compra em lote">
+      <button class="btn secondary" id="ped-bulk-apply-data-compra">Aplicar data compra</button>
+      <input type="date" id="ped-bulk-data-envio" style="max-width:170px;" title="Definir Data de Envio em lote">
+      <button class="btn secondary" id="ped-bulk-apply-data-envio">Aplicar data envio</button>
+      <button class="btn secondary" id="ped-bulk-delete">Excluir selecionados</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="ped-select-all"></th>
           <th>Nº Pedido</th><th>Licitante</th><th>Fornecedor</th><th>Nº Empenho</th><th>Material</th>
           <th>Qtd</th><th>Preço Compra</th><th>Preço Venda</th>
           <th>Data Pedido Email</th><th>Data da Compra</th><th>Data Envio</th><th>Prazo Máx. Envio</th>
@@ -2881,7 +2897,34 @@ function pedidosCompute(values){
 }
 
 let pedidosSubTab = "recebidos";
+let pedidosSelectedIds = new Set();
 const PEDIDOS_STATUS_SUBTAB = { "À enviar":"recebidos", "Comprado":"comprado", "Enviado":"enviados" };
+
+function pedidosUpdateBulkBar(){
+  const bar = document.getElementById("ped-bulk-bar");
+  const n = pedidosSelectedIds.size;
+  if(n === 0){ bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  document.getElementById("ped-bulk-count").textContent = n + " selecionado(s)";
+}
+
+// Duplica o pedido para Licitações quando o status muda para "Enviado" (mesma regra do form individual)
+async function pedidosDuplicarParaLicitacoes(item){
+  const licPayload = {
+    empenho: item.empenho || null,
+    numero_pedido: item.numero || null,
+    data_envio: item.dataEnvio || null,
+    cliente_id: findIdByName(clientesData, item.licitante),
+    cliente_nome: item.licitante || null,
+    valor_compra: parseFloat(item.precoCompra && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoCompra)) : 0) || 0,
+    valor_receber_total: parseFloat(item.precoVenda && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoVenda)) : 0) || 0,
+    produto: item.material || null,
+    observacao_geral: item.observacao || null,
+  };
+  const { error: licErr } = await sb.from("licitacoes").insert(licPayload);
+  if(licErr) console.error(licErr);
+  return !licErr;
+}
 
 function pedidosRowSubTab(p){
   return PEDIDOS_STATUS_SUBTAB[p.status] || "recebidos";
@@ -2917,7 +2960,7 @@ function pedidosRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 20;
+    td.colSpan = 21;
     const emptyMsg = pedidosSubTab === "comprado"
       ? "Nenhum pedido comprado ainda. Altere o status para \"Comprado\" ao editar um pedido para movê-lo para cá."
       : pedidosSubTab === "enviados"
@@ -2925,6 +2968,9 @@ function pedidosRender(searchTerm){
       : "Nenhum pedido recebido no momento. Clique em \"Novo Pedido\" para começar.";
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg><div>${emptyMsg}</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
+    const selAllEmpty = document.getElementById("ped-select-all");
+    if(selAllEmpty) selAllEmpty.checked = false;
+    pedidosUpdateBulkBar();
     return;
   }
   rows.forEach(p=>{
@@ -2938,6 +2984,19 @@ function pedidosRender(searchTerm){
       td.textContent = text;
       return td;
     };
+    const tdChk = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = pedidosSelectedIds.has(p.id);
+    chk.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(chk.checked) pedidosSelectedIds.add(p.id); else pedidosSelectedIds.delete(p.id);
+      const selAll = document.getElementById("ped-select-all");
+      if(selAll) selAll.checked = rows.every(x=>pedidosSelectedIds.has(x.id));
+      pedidosUpdateBulkBar();
+    });
+    tdChk.appendChild(chk);
+    tr.appendChild(tdChk);
     tr.appendChild(cell(p.numero||""));
     tr.appendChild(cell(p.licitante||""));
     tr.appendChild(cell(p.fornecedor||""));
@@ -2994,6 +3053,7 @@ function pedidosRender(searchTerm){
       if(confirm("Excluir este pedido?")){
         const { error } = await sb.from("pedidos").delete().eq("id", p.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        pedidosSelectedIds.delete(p.id);
         await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
       }
     });
@@ -3002,6 +3062,9 @@ function pedidosRender(searchTerm){
     tr.addEventListener("click", ()=>pedidosOpenForm(idx));
     tbody.appendChild(tr);
   });
+  const selAll = document.getElementById("ped-select-all");
+  if(selAll) selAll.checked = rows.length>0 && rows.every(r=>pedidosSelectedIds.has(r.id));
+  pedidosUpdateBulkBar();
 }
 
 function pedidosRenderKpis(){
@@ -3287,6 +3350,74 @@ document.querySelectorAll("#ped-subtabs .subtab-btn").forEach(btn=>{
     pedidosSubTab = btn.dataset.subtab;
     pedidosRender(document.getElementById("ped-search").value);
   });
+});
+document.getElementById("ped-select-all").addEventListener("change", (e)=>{
+  const fornFilter = document.getElementById("ped-fornecedor-filter").value;
+  const statusFilter = document.getElementById("ped-status-filter").value;
+  const searchTerm = document.getElementById("ped-search").value.trim().toLowerCase();
+  let rows = pedidosData.filter(p => pedidosRowSubTab(p) === pedidosSubTab);
+  if(fornFilter) rows = rows.filter(p => p.fornecedor === fornFilter);
+  if(statusFilter) rows = rows.filter(p => p.status === statusFilter);
+  if(searchTerm) rows = rows.filter(p => Object.values(p).join(" ").toLowerCase().includes(searchTerm));
+  if(e.target.checked) rows.forEach(p=>pedidosSelectedIds.add(p.id));
+  else rows.forEach(p=>pedidosSelectedIds.delete(p.id));
+  pedidosRender(document.getElementById("ped-search").value);
+});
+document.getElementById("ped-bulk-apply-status").addEventListener("click", async ()=>{
+  if(pedidosSelectedIds.size === 0) return;
+  const status = document.getElementById("ped-bulk-status").value;
+  if(!status){ showAppAlert("Selecione o novo status a aplicar."); return; }
+  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
+  if(status === "Enviado" && !confirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado" e duplicados para Licitações. Continuar?`)) return;
+  for(const p of selecionados){
+    const payload = { status };
+    if(status === "Comprado" || status === "Enviado") payload.comprado = true;
+    if(status === "À enviar") payload.comprado = false;
+    const { error } = await sb.from("pedidos").update(payload).eq("id", p.id);
+    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); continue; }
+    if(status === "Enviado" && p.status !== "Enviado"){
+      await pedidosDuplicarParaLicitacoes({...p, status});
+    }
+  }
+  pedidosSelectedIds.clear();
+  document.getElementById("ped-bulk-status").value = "";
+  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+  if(status === "Enviado"){ await licLoad(); licPopulateFilters(); licRender(); licRenderKpis(); }
+});
+document.getElementById("ped-bulk-apply-data-compra").addEventListener("click", async ()=>{
+  if(pedidosSelectedIds.size === 0) return;
+  const data = document.getElementById("ped-bulk-data-compra").value;
+  if(!data){ showAppAlert("Selecione a Data da Compra a aplicar."); return; }
+  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
+  for(const p of selecionados){
+    const { error } = await sb.from("pedidos").update({data_compra:data}).eq("id", p.id);
+    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
+  }
+  document.getElementById("ped-bulk-data-compra").value = "";
+  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+});
+document.getElementById("ped-bulk-apply-data-envio").addEventListener("click", async ()=>{
+  if(pedidosSelectedIds.size === 0) return;
+  const data = document.getElementById("ped-bulk-data-envio").value;
+  if(!data){ showAppAlert("Selecione a Data de Envio a aplicar."); return; }
+  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
+  for(const p of selecionados){
+    const { error } = await sb.from("pedidos").update({data_envio:data}).eq("id", p.id);
+    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
+  }
+  document.getElementById("ped-bulk-data-envio").value = "";
+  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+});
+document.getElementById("ped-bulk-delete").addEventListener("click", async ()=>{
+  if(pedidosSelectedIds.size === 0) return;
+  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
+  if(!confirm(`Excluir ${selecionados.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+  for(const p of selecionados){
+    const { error } = await sb.from("pedidos").delete().eq("id", p.id);
+    if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
+    pedidosSelectedIds.delete(p.id);
+  }
+  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
 });
 
 /* ============ PLANEJAMENTO (fornecedor/produto/quantidade/valores) ============ */
