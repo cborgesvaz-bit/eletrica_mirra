@@ -325,6 +325,7 @@
   .modal-body .field{display:flex;flex-direction:column;gap:6px;}
   .modal-body .field.full{grid-column:1/-1;}
   .modal-body .field.autocomplete-wrap{position:relative;}
+  .ped-item-row + .ped-item-row{border-top:1px solid var(--line);padding-top:18px;}
   .autocomplete-list{
     position:absolute;
     top:calc(100% + 4px);
@@ -3147,34 +3148,35 @@ function wireAutocomplete(wrapEl, input, quickAddType, opts={}){
 
 function pedItemRowTemplate(seq){
   return `
-    <div class="ped-item-row" data-seq="${seq}" style="display:flex;align-items:flex-end;gap:8px;">
-      <div class="field" style="margin:0;width:132px;flex-shrink:0;">
-        <label style="font-size:11px;">Fornecedor</label>
-        <div style="display:flex;gap:4px;">
-          <input type="text" data-f="fornecedor" autocomplete="off" style="min-width:0;">
-          <button type="button" data-qa="fornecedor" class="icon-btn" title="Novo fornecedor" style="flex-shrink:0;padding:0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg></button>
+    <div class="ped-item-row" data-seq="${seq}" style="grid-column:1/-1;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <label style="font-weight:700;margin:0;">Produto</label>
+        <button type="button" class="icon-btn ped-item-remove" title="Remover produto">${iconTrash}</button>
+      </div>
+      <div class="field full" style="margin:0 0 14px;">
+        <label>Fornecedor</label>
+        <input type="text" data-f="fornecedor" autocomplete="off">
+        <div class="client-quickadd"><button type="button" data-qa="fornecedor"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo fornecedor</button></div>
+      </div>
+      <div class="field full" style="margin:0 0 14px;">
+        <label>Produto</label>
+        <input type="text" data-f="material" autocomplete="off">
+        <div class="client-quickadd"><button type="button" data-qa="produto"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo produto</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px 16px;">
+        <div class="field" style="margin:0;">
+          <label>Quantidade</label>
+          <input type="number" step="0.01" data-f="quantidade">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Preço Compra (R$)</label>
+          <input type="number" step="0.01" data-f="precoCompra">
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Preço Venda (R$)</label>
+          <input type="number" step="0.01" data-f="precoVenda">
         </div>
       </div>
-      <div class="field" style="margin:0;width:132px;flex-shrink:0;">
-        <label style="font-size:11px;">Produto</label>
-        <div style="display:flex;gap:4px;">
-          <input type="text" data-f="material" autocomplete="off" style="min-width:0;">
-          <button type="button" data-qa="produto" class="icon-btn" title="Novo produto" style="flex-shrink:0;padding:0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg></button>
-        </div>
-      </div>
-      <div class="field" style="margin:0;width:52px;flex-shrink:0;">
-        <label style="font-size:11px;">Qtd</label>
-        <input type="number" step="0.01" data-f="quantidade">
-      </div>
-      <div class="field" style="margin:0;width:78px;flex-shrink:0;">
-        <label style="font-size:11px;">Preço Compra</label>
-        <input type="number" step="0.01" data-f="precoCompra">
-      </div>
-      <div class="field" style="margin:0;width:78px;flex-shrink:0;">
-        <label style="font-size:11px;">Preço Venda</label>
-        <input type="number" step="0.01" data-f="precoVenda">
-      </div>
-      <button type="button" class="icon-btn ped-item-remove" title="Remover produto" style="flex-shrink:0;height:38px;padding:0 6px;">${iconTrash}</button>
     </div>`;
 }
 function pedidosOpenMultiForm(){
@@ -3197,7 +3199,7 @@ function pedidosOpenMultiForm(){
     <div class="field full">
       <label style="font-weight:700;">Produtos deste Pedido <span style="font-weight:400;color:var(--muted);">— podem ser de fornecedores diferentes; cada um vira um item gerenciável separadamente</span></label>
     </div>
-    <div class="field full" id="pedmulti-items" style="display:flex;flex-direction:column;gap:10px;overflow-x:auto;padding-bottom:4px;"></div>
+    <div class="field full" id="pedmulti-items" style="display:flex;flex-direction:column;gap:18px;padding-bottom:4px;"></div>
     <div class="field full" style="margin-top:-8px;">
       <button type="button" class="btn secondary" id="pedmulti-add-item">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
@@ -3217,8 +3219,8 @@ function pedidosOpenMultiForm(){
     });
     const fornecedorInput = row.querySelector('[data-f="fornecedor"]');
     const materialInput = row.querySelector('[data-f="material"]');
-    wireAutocomplete(fornecedorInput.closest(".field"), fornecedorInput, "fornecedor", {listWidth:"240px"});
-    wireAutocomplete(materialInput.closest(".field"), materialInput, "produto", {listWidth:"240px"});
+    wireAutocomplete(fornecedorInput.closest(".field"), fornecedorInput, "fornecedor");
+    wireAutocomplete(materialInput.closest(".field"), materialInput, "produto");
     row.querySelector('[data-qa="fornecedor"]').addEventListener("click", ()=>{
       addFornecedorQuick(fornecedorInput.value, (nome)=>{ fornecedorInput.value = nome; });
     });
