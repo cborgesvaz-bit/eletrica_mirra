@@ -3016,6 +3016,139 @@ function pedidosRenderKpis(){
   `;
 }
 
+/* ============ NOVO PEDIDO COM MÚLTIPLOS PRODUTOS ============ */
+// Permite lançar vários produtos (potencialmente de fornecedores diferentes) sob a
+// mesma Nota de Empenho em um único envio. Cada produto vira uma linha independente
+// na tabela `pedidos`, com fornecedor e status próprios — permitindo gerenciar a
+// compra individualmente por produto (ex.: marcar "Comprado" só de um fornecedor).
+let pedItemRowSeq = 0;
+function pedItemRowTemplate(seq){
+  return `
+    <div class="ped-item-row" data-seq="${seq}" style="display:grid;grid-template-columns:1.3fr 1.3fr 0.7fr 0.9fr 0.9fr auto;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line);">
+      <div class="field" style="margin:0;">
+        <label style="font-size:11px;">Fornecedor</label>
+        <input type="text" data-f="fornecedor" list="fornecedores-datalist" autocomplete="off">
+        <div class="client-quickadd" style="margin-top:4px;"><button type="button" data-qa="fornecedor" style="font-size:11px;padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M12 5v14M5 12h14"/></svg>Novo fornecedor</button></div>
+      </div>
+      <div class="field" style="margin:0;">
+        <label style="font-size:11px;">Produto</label>
+        <input type="text" data-f="material" list="produtos-datalist" autocomplete="off">
+        <div class="client-quickadd" style="margin-top:4px;"><button type="button" data-qa="produto" style="font-size:11px;padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M12 5v14M5 12h14"/></svg>Novo produto</button></div>
+      </div>
+      <div class="field" style="margin:0;">
+        <label style="font-size:11px;">Qtd</label>
+        <input type="number" step="0.01" data-f="quantidade">
+      </div>
+      <div class="field" style="margin:0;">
+        <label style="font-size:11px;">Preço Compra</label>
+        <input type="number" step="0.01" data-f="precoCompra">
+      </div>
+      <div class="field" style="margin:0;">
+        <label style="font-size:11px;">Preço Venda</label>
+        <input type="number" step="0.01" data-f="precoVenda">
+      </div>
+      <button type="button" class="icon-btn ped-item-remove" title="Remover produto" style="height:38px;">${iconTrash}</button>
+    </div>`;
+}
+function pedidosOpenMultiForm(){
+  modalTitle.textContent = "Novo Pedido";
+  modalTitleWrap.querySelector("svg").outerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`;
+  modalBody.innerHTML = `
+    <div class="field full" style="margin:0 0 4px;">
+      <label style="font-weight:700;">Dados do Pedido</label>
+    </div>
+    <div class="field full">
+      <label>Licitante (Cliente)</label>
+      <input type="text" id="pedmulti-licitante" list="clientes-datalist" autocomplete="off">
+      <div class="client-quickadd"><button type="button" id="pedmulti-licitante-qa"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo cliente</button></div>
+    </div>
+    <div class="field"><label>Nº Pedido</label><input type="text" id="pedmulti-numero"></div>
+    <div class="field"><label>Nº Empenho</label><input type="text" id="pedmulti-empenho"></div>
+    <div class="field"><label>Data Pedido Email</label><input type="date" id="pedmulti-dataPedidoEmail"></div>
+    <div class="field"><label>Data da Compra</label><input type="date" id="pedmulti-dataCompra"></div>
+    <div class="field"><label>Data Envio</label><input type="date" id="pedmulti-dataEnvio"></div>
+    <div class="field full">
+      <label style="font-weight:700;">Produtos deste Pedido <span style="font-weight:400;color:var(--muted);">— podem ser de fornecedores diferentes; cada um vira um item gerenciável separadamente</span></label>
+    </div>
+    <div class="field full" id="pedmulti-items"></div>
+    <div class="field full" style="margin-top:-8px;">
+      <button type="button" class="btn secondary" id="pedmulti-add-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
+        Adicionar produto
+      </button>
+    </div>
+    <div class="field full"><label>Observação</label><textarea id="pedmulti-observacao"></textarea></div>
+  `;
+  const itemsWrap = document.getElementById("pedmulti-items");
+  function addItemRow(){
+    pedItemRowSeq++;
+    itemsWrap.insertAdjacentHTML("beforeend", pedItemRowTemplate(pedItemRowSeq));
+    const row = itemsWrap.querySelector(`.ped-item-row[data-seq="${pedItemRowSeq}"]`);
+    row.querySelector(".ped-item-remove").addEventListener("click", ()=>{
+      if(itemsWrap.querySelectorAll(".ped-item-row").length <= 1){ showAppAlert("O pedido precisa ter ao menos um produto."); return; }
+      row.remove();
+    });
+    row.querySelector('[data-qa="fornecedor"]').addEventListener("click", ()=>{
+      const input = row.querySelector('[data-f="fornecedor"]');
+      addFornecedorQuick(input.value, (nome)=>{ input.value = nome; });
+    });
+    row.querySelector('[data-qa="produto"]').addEventListener("click", ()=>{
+      const input = row.querySelector('[data-f="material"]');
+      addProdutoQuick(input.value, (nome)=>{ input.value = nome; });
+    });
+  }
+  addItemRow();
+  document.getElementById("pedmulti-add-item").addEventListener("click", addItemRow);
+  document.getElementById("pedmulti-licitante-qa").addEventListener("click", ()=>{
+    const input = document.getElementById("pedmulti-licitante");
+    addClienteQuick(input.value, (nome)=>{ input.value = nome; });
+  });
+
+  modalOnSave = async ()=>{
+    const licitante = document.getElementById("pedmulti-licitante").value.trim();
+    if(!licitante){ showAppAlert("Informe o Licitante (Cliente)."); return; }
+    const header = {
+      numero: document.getElementById("pedmulti-numero").value.trim(),
+      licitante,
+      empenho: document.getElementById("pedmulti-empenho").value.trim(),
+      dataPedidoEmail: document.getElementById("pedmulti-dataPedidoEmail").value,
+      dataCompra: document.getElementById("pedmulti-dataCompra").value,
+      dataEnvio: document.getElementById("pedmulti-dataEnvio").value,
+      observacao: document.getElementById("pedmulti-observacao").value.trim(),
+    };
+    const rows = [...itemsWrap.querySelectorAll(".ped-item-row")];
+    const payloads = [];
+    for(const row of rows){
+      const material = row.querySelector('[data-f="material"]').value.trim();
+      if(!material) continue; // ignora linhas em branco
+      const item = {
+        ...header,
+        fornecedor: row.querySelector('[data-f="fornecedor"]').value.trim(),
+        material,
+        quantidade: row.querySelector('[data-f="quantidade"]').value,
+        precoCompra: row.querySelector('[data-f="precoCompra"]').value,
+        precoVenda: row.querySelector('[data-f="precoVenda"]').value,
+        comprado: false,
+        status: "À enviar",
+      };
+      payloads.push(pedidosToDbPayload(item));
+    }
+    if(payloads.length === 0){ showAppAlert("Adicione ao menos um produto com nome preenchido."); return; }
+    const saveBtn = document.getElementById("modal-save-btn");
+    saveBtn.disabled = true; saveBtn.style.opacity = "0.6";
+    try{
+      const { error } = await sb.from("pedidos").insert(payloads);
+      if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return; }
+      closeModal();
+      await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+      showAppAlert(`${payloads.length} produto(s) lançado(s) no pedido com sucesso.`, "success");
+    } finally {
+      saveBtn.disabled = false; saveBtn.style.opacity = "";
+    }
+  };
+  modalOverlay.classList.add("active");
+}
+
 function pedidosOpenForm(existingIndex){
   const existing = existingIndex !== undefined && existingIndex !== null ? pedidosData[existingIndex] : null;
   const fields = [
@@ -3143,7 +3276,7 @@ function pedidosOpenForm(existingIndex){
   });
 }
 
-document.getElementById("ped-add").addEventListener("click", ()=>pedidosOpenForm(null));
+document.getElementById("ped-add").addEventListener("click", ()=>pedidosOpenMultiForm());
 document.getElementById("ped-search").addEventListener("input", e=>pedidosRender(e.target.value));
 document.getElementById("ped-fornecedor-filter").addEventListener("change", ()=>pedidosRender(document.getElementById("ped-search").value));
 document.getElementById("ped-status-filter").addEventListener("change", ()=>pedidosRender(document.getElementById("ped-search").value));
