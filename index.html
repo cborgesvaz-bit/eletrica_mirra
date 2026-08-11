@@ -757,6 +757,7 @@
         <option value="À enviar">À enviar</option>
         <option value="Comprado">Comprado</option>
         <option value="Enviado">Enviado</option>
+        <option value="Selecionado pra compra">Selecionado pra compra</option>
       </select>
       <button class="btn secondary" id="ped-bulk-apply-status">Aplicar status</button>
       <input type="date" id="ped-bulk-data-compra" style="max-width:170px;" title="Definir Data da Compra em lote">
@@ -3509,9 +3510,10 @@ document.getElementById("ped-bulk-apply-status").addEventListener("click", async
   if(!status){ showAppAlert("Selecione o novo status a aplicar."); return; }
   const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
   if(status === "Enviado" && !confirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado" e duplicados para Licitações. Continuar?`)) return;
+  if(status === "Selecionado pra compra" && !confirm(`${selecionados.length} pedido(s) selecionado(s) serão movidos para a aba Planejamento. Continuar?`)) return;
   for(const p of selecionados){
     const payload = { status };
-    if(status === "Comprado" || status === "Enviado") payload.comprado = true;
+    if(status === "Comprado" || status === "Enviado" || status === "Selecionado pra compra") payload.comprado = true;
     if(status === "À enviar") payload.comprado = false;
     const { error } = await sb.from("pedidos").update(payload).eq("id", p.id);
     if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); continue; }
@@ -3523,6 +3525,7 @@ document.getElementById("ped-bulk-apply-status").addEventListener("click", async
   document.getElementById("ped-bulk-status").value = "";
   await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
   if(status === "Enviado"){ await licLoad(); licPopulateFilters(); licRender(); licRenderKpis(); }
+  if(status === "Selecionado pra compra"){ await planLoad(); planRender(""); }
 });
 document.getElementById("ped-bulk-apply-data-compra").addEventListener("click", async ()=>{
   if(pedidosSelectedIds.size === 0) return;
