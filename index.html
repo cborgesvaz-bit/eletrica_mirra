@@ -732,6 +732,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
         Enviados <span class="count" id="ped-count-enviados">0</span>
       </button>
+      <button class="subtab-btn" data-subtab="historico">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13a9 9 0 1 0 .5-4.5"/><path d="M12 7v5l4 2"/></svg>
+        Histórico <span class="count" id="ped-count-historico">0</span>
+      </button>
     </div>
     <div class="toolbar">
       <div class="search-box">
@@ -2927,6 +2931,7 @@ async function pedidosDuplicarParaLicitacoes(item){
 }
 
 function pedidosRowSubTab(p){
+  if(p.status === "Enviado" && p.dataEnvio) return "historico";
   return PEDIDOS_STATUS_SUBTAB[p.status] || "recebidos";
 }
 
@@ -2957,6 +2962,7 @@ function pedidosRender(searchTerm){
   document.getElementById("ped-count-recebidos").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="recebidos").length;
   document.getElementById("ped-count-comprado").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="comprado").length;
   document.getElementById("ped-count-enviados").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="enviados").length;
+  document.getElementById("ped-count-historico").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="historico").length;
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -2965,6 +2971,8 @@ function pedidosRender(searchTerm){
       ? "Nenhum pedido comprado ainda. Altere o status para \"Comprado\" ao editar um pedido para movê-lo para cá."
       : pedidosSubTab === "enviados"
       ? "Nenhum pedido enviado no momento."
+      : pedidosSubTab === "historico"
+      ? "Nenhum pedido no histórico ainda. Pedidos com status \"Enviado\" e Data de Envio preenchida aparecem aqui automaticamente."
       : "Nenhum pedido recebido no momento. Clique em \"Novo Pedido\" para começar.";
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg><div>${emptyMsg}</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
