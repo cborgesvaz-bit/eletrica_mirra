@@ -3107,20 +3107,58 @@ function pedidosRenderKpis(){
 // na tabela `pedidos`, com fornecedor e status próprios — permitindo gerenciar a
 // compra individualmente por produto (ex.: marcar "Comprado" só de um fornecedor).
 let pedItemRowSeq = 0;
+// Widget de autocomplete padrão da plataforma (mesmo comportamento usado nos formulários
+// gerados por openModal/Licitações/Contas a Pagar) — reutilizável para HTML montado à mão.
+function wireAutocomplete(wrapEl, input, quickAddType, opts={}){
+  wrapEl.classList.add("autocomplete-wrap");
+  input.autocomplete = "off";
+  input.removeAttribute("list");
+  const listEl = document.createElement("div");
+  listEl.className = "autocomplete-list";
+  listEl.style.display = "none";
+  if(opts.listWidth) listEl.style.width = opts.listWidth;
+  wrapEl.appendChild(listEl);
+  const getSource = ()=>{
+    if(quickAddType === "cliente") return clientesData.map(c=>c.nome);
+    if(quickAddType === "fornecedor") return fornecedoresData.map(c=>c.nome);
+    if(quickAddType === "produto") return produtosData.map(c=>c.nome);
+    return [];
+  };
+  const renderAutoList = ()=>{
+    const term = input.value.trim().toLowerCase();
+    const items = getSource().filter(n=>n && (!term || n.toLowerCase().includes(term))).slice(0,60);
+    listEl.innerHTML = items.length === 0
+      ? `<div class="autocomplete-empty">Nenhum cadastro encontrado</div>`
+      : items.map(n=>`<div class="autocomplete-item">${n}</div>`).join("");
+    listEl.style.display = "block";
+  };
+  input.addEventListener("focus", renderAutoList);
+  input.addEventListener("input", renderAutoList);
+  input.addEventListener("blur", ()=>{ listEl.style.display = "none"; });
+  listEl.addEventListener("mousedown", (e)=>{
+    e.preventDefault();
+    const item = e.target.closest(".autocomplete-item");
+    if(!item) return;
+    input.value = item.textContent;
+    listEl.style.display = "none";
+    input.dispatchEvent(new Event("input", {bubbles:true}));
+  });
+}
+
 function pedItemRowTemplate(seq){
   return `
     <div class="ped-item-row" data-seq="${seq}" style="display:flex;align-items:flex-end;gap:8px;">
       <div class="field" style="margin:0;width:132px;flex-shrink:0;">
         <label style="font-size:11px;">Fornecedor</label>
         <div style="display:flex;gap:4px;">
-          <input type="text" data-f="fornecedor" list="fornecedores-datalist" autocomplete="off" style="min-width:0;">
+          <input type="text" data-f="fornecedor" autocomplete="off" style="min-width:0;">
           <button type="button" data-qa="fornecedor" class="icon-btn" title="Novo fornecedor" style="flex-shrink:0;padding:0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg></button>
         </div>
       </div>
       <div class="field" style="margin:0;width:132px;flex-shrink:0;">
         <label style="font-size:11px;">Produto</label>
         <div style="display:flex;gap:4px;">
-          <input type="text" data-f="material" list="produtos-datalist" autocomplete="off" style="min-width:0;">
+          <input type="text" data-f="material" autocomplete="off" style="min-width:0;">
           <button type="button" data-qa="produto" class="icon-btn" title="Novo produto" style="flex-shrink:0;padding:0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg></button>
         </div>
       </div>
@@ -3148,7 +3186,7 @@ function pedidosOpenMultiForm(){
     </div>
     <div class="field full">
       <label>Licitante (Cliente)</label>
-      <input type="text" id="pedmulti-licitante" list="clientes-datalist" autocomplete="off">
+      <input type="text" id="pedmulti-licitante" autocomplete="off">
       <div class="client-quickadd"><button type="button" id="pedmulti-licitante-qa"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Cadastrar novo cliente</button></div>
     </div>
     <div class="field"><label>Nº Pedido</label><input type="text" id="pedmulti-numero"></div>
@@ -3177,20 +3215,23 @@ function pedidosOpenMultiForm(){
       if(itemsWrap.querySelectorAll(".ped-item-row").length <= 1){ showAppAlert("O pedido precisa ter ao menos um produto."); return; }
       row.remove();
     });
+    const fornecedorInput = row.querySelector('[data-f="fornecedor"]');
+    const materialInput = row.querySelector('[data-f="material"]');
+    wireAutocomplete(fornecedorInput.closest(".field"), fornecedorInput, "fornecedor", {listWidth:"240px"});
+    wireAutocomplete(materialInput.closest(".field"), materialInput, "produto", {listWidth:"240px"});
     row.querySelector('[data-qa="fornecedor"]').addEventListener("click", ()=>{
-      const input = row.querySelector('[data-f="fornecedor"]');
-      addFornecedorQuick(input.value, (nome)=>{ input.value = nome; });
+      addFornecedorQuick(fornecedorInput.value, (nome)=>{ fornecedorInput.value = nome; });
     });
     row.querySelector('[data-qa="produto"]').addEventListener("click", ()=>{
-      const input = row.querySelector('[data-f="material"]');
-      addProdutoQuick(input.value, (nome)=>{ input.value = nome; });
+      addProdutoQuick(materialInput.value, (nome)=>{ materialInput.value = nome; });
     });
   }
   addItemRow();
   document.getElementById("pedmulti-add-item").addEventListener("click", addItemRow);
+  const licitanteInput = document.getElementById("pedmulti-licitante");
+  wireAutocomplete(licitanteInput.closest(".field"), licitanteInput, "cliente");
   document.getElementById("pedmulti-licitante-qa").addEventListener("click", ()=>{
-    const input = document.getElementById("pedmulti-licitante");
-    addClienteQuick(input.value, (nome)=>{ input.value = nome; });
+    addClienteQuick(licitanteInput.value, (nome)=>{ licitanteInput.value = nome; });
   });
 
   modalOnSave = async ()=>{
