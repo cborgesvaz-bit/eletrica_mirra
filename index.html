@@ -830,6 +830,20 @@
   <section id="view-contas" class="view">
     <div id="contas-alert"></div>
     <div class="kpis" id="contas-kpis"></div>
+    <div class="subtabs" id="contas-subtabs">
+      <button class="subtab-btn active" data-subtab="apagar">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        A Pagar <span class="count" id="contas-count-apagar">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="atrasado">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+        Atrasado <span class="count" id="contas-count-atrasado">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="pago">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Pago <span class="count" id="contas-count-pago">0</span>
+      </button>
+    </div>
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -3722,6 +3736,11 @@ document.getElementById("plan-bulk-delete").addEventListener("click", async ()=>
 
 /* ============ CONTAS A PAGAR ============ */
 let contasData = [];
+let contasSubTab = "apagar";
+const CONTAS_STATUS_SUBTAB = { "Pendente":"apagar", "Atrasado":"atrasado", "Pago":"pago" };
+function contasRowSubTab(c){
+  return CONTAS_STATUS_SUBTAB[c.status] || "apagar";
+}
 function contasToDbPayload(item){
   return {
     fornecedor_nome: item.fornecedor || null,
@@ -3750,16 +3769,24 @@ async function contasLoad(){
 function contasRender(searchTerm){
   const tbody = document.getElementById("contas-body");
   tbody.innerHTML = "";
-  let rows = contasData;
+  let rows = contasData.filter(c => contasRowSubTab(c) === contasSubTab);
   if(searchTerm){
     const s = searchTerm.toLowerCase();
-    rows = contasData.filter(c=>Object.values(c).join(" ").toLowerCase().includes(s));
+    rows = rows.filter(c=>Object.values(c).join(" ").toLowerCase().includes(s));
   }
+  document.getElementById("contas-count-apagar").textContent = contasData.filter(c=>contasRowSubTab(c)==="apagar").length;
+  document.getElementById("contas-count-atrasado").textContent = contasData.filter(c=>contasRowSubTab(c)==="atrasado").length;
+  document.getElementById("contas-count-pago").textContent = contasData.filter(c=>contasRowSubTab(c)==="pago").length;
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 6;
-    td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><div>Nenhuma conta cadastrada ainda. Clique em "Nova Conta" para adicionar.</div></div>`;
+    const emptyMsg = contasSubTab === "atrasado"
+      ? "Nenhuma conta em atraso no momento."
+      : contasSubTab === "pago"
+      ? "Nenhuma conta paga ainda."
+      : "Nenhuma conta a pagar no momento. Clique em \"Nova Conta\" para adicionar.";
+    td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><div>${emptyMsg}</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
     return;
   }
@@ -3868,6 +3895,14 @@ function checkContasAlerts(){
 }
 document.getElementById("contas-add").addEventListener("click", ()=> contasOpenForm(null));
 document.getElementById("contas-search").addEventListener("input", e=>contasRender(e.target.value));
+document.querySelectorAll("#contas-subtabs .subtab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#contas-subtabs .subtab-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    contasSubTab = btn.dataset.subtab;
+    contasRender(document.getElementById("contas-search").value);
+  });
+});
 
 /* ============ INICIALIZAÇÃO (carrega tudo do Supabase, na ordem certa) ============ */
 async function initApp(){
