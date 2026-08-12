@@ -794,10 +794,11 @@
 
   <!-- PLANEJAMENTO -->
   <section id="view-planejamento" class="view">
+    <div class="kpis" id="plan-kpis-fornecedor"></div>
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="plan-search" placeholder="Buscar item, fornecedor, produto...">
+        <input type="text" id="plan-search" placeholder="Buscar item, licitante, fornecedor, produto...">
       </div>
       <select id="plan-fornecedor-filter"><option value="">Todos os fornecedores</option></select>
       <button class="btn secondary" id="plan-export">
@@ -823,7 +824,7 @@
       <table>
         <thead><tr>
           <th style="width:32px;"><input type="checkbox" id="plan-select-all"></th>
-          <th>Fornecedor</th><th>Produto</th><th>Quantidade</th><th>Preço de Compra</th><th>Preço Unitário</th><th>Valor Total</th><th>Ações</th>
+          <th>Licitante</th><th>Nº Empenho</th><th>Fornecedor</th><th>Produto</th><th>Quantidade</th><th>Preço de Compra</th><th>Preço Unitário</th><th>Valor Total</th><th>Ações</th>
         </tr></thead>
         <tbody id="plan-body"></tbody>
       </table>
@@ -2925,7 +2926,6 @@ function pedidosFromDbRow(r){
 }
 async function pedidosLoad(){
   const { data, error } = await sb.from("pedidos").select("*")
-    .neq("status", "Selecionado pra compra")
     .order("created_at", {ascending:false});
   if(error){ console.error(error); pedidosData = []; return; }
   pedidosData = (data || []).map(pedidosFromDbRow);
@@ -2959,7 +2959,7 @@ function pedidosCompute(values){
 
 let pedidosSubTab = "recebidos";
 let pedidosSelectedIds = new Set();
-const PEDIDOS_STATUS_SUBTAB = { "À enviar":"recebidos", "Comprado":"comprado", "Enviado":"enviados" };
+const PEDIDOS_STATUS_SUBTAB = { "À enviar":"recebidos", "Comprado":"comprado", "Enviado":"enviados", "Selecionado pra compra":"comprado" };
 
 function pedidosUpdateBulkBar(){
   const bar = document.getElementById("ped-bulk-bar");
@@ -3609,6 +3609,9 @@ let planData = [];
 let planSelectedIds = new Set();
 function planToDbPayload(item){
   return {
+    licitante_nome: item.licitante || null,
+    licitante_id: findIdByName(clientesData, item.licitante),
+    empenho: item.empenho || null,
     fornecedor_nome: item.fornecedor || null,
     fornecedor_id: findIdByName(fornecedoresData, item.fornecedor),
     produto_nome: item.produto || null,
@@ -3621,6 +3624,8 @@ function planToDbPayload(item){
 function planFromDbRow(r){
   return {
     id: r.id,
+    licitante: r.licitante_nome || "",
+    empenho: r.empenho || "",
     fornecedor: r.fornecedor_nome || "",
     produto: r.produto_nome || "",
     quantidade: r.quantidade,
@@ -3672,7 +3677,7 @@ function planRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = 10;
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><div>Nenhum item de planejamento ainda. Pedidos com status "Selecionado pra compra" aparecem aqui automaticamente.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
     document.getElementById("plan-select-all").checked = false;
@@ -3694,6 +3699,8 @@ function planRender(searchTerm){
       planUpdateBulkBar();
     });
     tdChk.appendChild(chk);
+    const tdLic = document.createElement("td"); tdLic.textContent = p.licitante || "";
+    const tdEmp = document.createElement("td"); tdEmp.textContent = p.empenho || "";
     const tdF = document.createElement("td"); tdF.textContent = p.fornecedor || "";
     const tdP = document.createElement("td"); tdP.textContent = p.produto || "";
     const tdQ = document.createElement("td"); tdQ.classList.add("num"); tdQ.textContent = p.quantidade || 0;
@@ -3719,17 +3726,37 @@ function planRender(searchTerm){
       }
     });
     actionTd.append(editBtn, delBtn);
-    tr.append(tdChk, tdF, tdP, tdQ, tdPC, tdPU, tdVT, actionTd);
+    tr.append(tdChk, tdLic, tdEmp, tdF, tdP, tdQ, tdPC, tdPU, tdVT, actionTd);
     tr.addEventListener("click", ()=> planOpenForm(idx));
     tbody.appendChild(tr);
   });
   document.getElementById("plan-select-all").checked = rows.every(r=>planSelectedIds.has(r.id));
   planUpdateBulkBar();
+  planRenderResumoFornecedor(rows);
+}
+/* Resumo do valor de compra (Preço de Compra x Quantidade) agrupado por fornecedor,
+   calculado sobre as linhas atualmente filtradas/exibidas em Planejamento. */
+function planRenderResumoFornecedor(rows){
+  const wrap = document.getElementById("plan-kpis-fornecedor");
+  if(!rows.length){ wrap.innerHTML = ""; return; }
+  const porFornecedor = new Map();
+  rows.forEach(p=>{
+    const nome = p.fornecedor || "Sem fornecedor";
+    const valor = (parseFloat(p.quantidade)||0) * (parseFloat(p.precoCompra)||0);
+    porFornecedor.set(nome, (porFornecedor.get(nome)||0) + valor);
+  });
+  const ordenado = [...porFornecedor.entries()].sort((a,b)=>b[1]-a[1]);
+  const iconFornecedor = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1"/></svg>`;
+  wrap.innerHTML = ordenado.map(([nome, total])=>`
+    <div class="kpi"><div class="icon">${iconFornecedor}</div><div><div class="label">${nome} — Valor de Compra</div><div class="value">${fmtCurrency(total)}</div></div></div>
+  `).join("");
 }
 function planOpenForm(existingIndex){
   const existing = existingIndex !== undefined && existingIndex !== null ? planData[existingIndex] : null;
   const c0 = planCompute(existing || {});
   const fields = [
+    {key:"licitante", label:"Licitante", type:"text", datalist:"clientes-datalist", quickAdd:"cliente", full:true, value: existing?.licitante || ""},
+    {key:"empenho", label:"Nº Empenho", type:"text", value: existing?.empenho || ""},
     {key:"fornecedor", label:"Fornecedor", type:"text", datalist:"fornecedores-datalist", quickAdd:"fornecedor", full:true, value: existing?.fornecedor || ""},
     {key:"produto", label:"Produto", type:"text", datalist:"produtos-datalist", quickAdd:"produto", full:true, value: existing?.produto || ""},
     {key:"quantidade", label:"Quantidade", type:"number", step:"0.01", value: existing?.quantidade ?? ""},
@@ -3753,6 +3780,9 @@ function planOpenForm(existingIndex){
       // Selecionar um status aqui devolve o item para a tela de Pedidos com o status escolhido
       if(values.statusPedido && values.statusPedido !== "Manter em Planejamento"){
         const pedidoPayload = {
+          licitante_nome: values.licitante.trim() || null,
+          licitante_id: findIdByName(clientesData, values.licitante),
+          empenho: values.empenho.trim() || null,
           fornecedor_nome: values.fornecedor.trim() || null,
           fornecedor_id: findIdByName(fornecedoresData, values.fornecedor),
           material: values.produto.trim() || null,
@@ -3776,6 +3806,8 @@ function planOpenForm(existingIndex){
       }
 
       const item = {
+        licitante: values.licitante.trim(),
+        empenho: values.empenho.trim(),
         fornecedor: values.fornecedor.trim(),
         produto: values.produto.trim(),
         quantidade: values.quantidade,
@@ -3799,11 +3831,11 @@ function planExportXLS(){
   const fornecedorFilter = document.getElementById("plan-fornecedor-filter").value;
   let rows = planData;
   if(fornecedorFilter) rows = rows.filter(p=>p.fornecedor === fornecedorFilter);
-  const headers = ["Fornecedor","Produto","Quantidade","Preço de Compra","Preço Unitário","Valor Total"];
+  const headers = ["Licitante","Nº Empenho","Fornecedor","Produto","Quantidade","Preço de Compra","Preço Unitário","Valor Total"];
   let table = "<table><tr>" + headers.map(h=>`<th>${h}</th>`).join("") + "</tr>";
   rows.forEach(p=>{
     table += "<tr>" +
-      `<td>${p.fornecedor||""}</td><td>${p.produto||""}</td><td>${p.quantidade||0}</td>` +
+      `<td>${p.licitante||""}</td><td>${p.empenho||""}</td><td>${p.fornecedor||""}</td><td>${p.produto||""}</td><td>${p.quantidade||0}</td>` +
       `<td>${(p.precoCompra||0).toString().replace(".",",")}</td><td>${(p.precoUnitario||0).toString().replace(".",",")}</td><td>${(p.valorTotal||0).toString().replace(".",",")}</td>` +
       "</tr>";
   });
@@ -3864,6 +3896,9 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
   if(!(await showAppConfirm(`Mover ${selecionados.length} item(ns) para Pedidos com status "${status}"?`))) return;
   for(const p of selecionados){
     const pedidoPayload = {
+      licitante_nome: p.licitante || null,
+      licitante_id: findIdByName(clientesData, p.licitante),
+      empenho: p.empenho || null,
       fornecedor_nome: p.fornecedor || null,
       fornecedor_id: findIdByName(fornecedoresData, p.fornecedor),
       material: p.produto || null,
