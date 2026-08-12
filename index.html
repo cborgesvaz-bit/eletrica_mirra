@@ -418,6 +418,8 @@
   .app-alert-title{font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px;}
   .app-alert-message{font-size:13.5px;color:var(--text);line-height:1.5;margin-bottom:22px;white-space:pre-line;}
   .app-alert-card .btn{width:100%;justify-content:center;}
+  .app-alert-card .app-confirm-actions{display:flex;gap:10px;}
+  .app-alert-card .app-confirm-actions .btn{width:auto;flex:1;}
 
   @media (max-width:560px){
     .modal-body{grid-template-columns:1fr;}
@@ -792,7 +794,6 @@
 
   <!-- PLANEJAMENTO -->
   <section id="view-planejamento" class="view">
-    <div class="kpis" id="plan-fornecedor-summary"></div>
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -1018,6 +1019,19 @@
     <div class="app-alert-title" id="app-alert-title">Aviso</div>
     <div class="app-alert-message" id="app-alert-message"></div>
     <button class="btn" id="app-alert-ok-btn">Ok, entendi</button>
+  </div>
+</div>
+
+<!-- MODAL DE CONFIRMAÇÃO (substitui confirm() nativo) -->
+<div class="app-alert-overlay" id="app-confirm-overlay">
+  <div class="app-alert-card">
+    <div class="app-alert-icon warning" id="app-confirm-icon"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+    <div class="app-alert-title" id="app-confirm-title">Confirmar ação</div>
+    <div class="app-alert-message" id="app-confirm-message"></div>
+    <div class="app-confirm-actions">
+      <button class="btn secondary" id="app-confirm-cancel-btn">Cancelar</button>
+      <button class="btn" id="app-confirm-ok-btn">Continuar</button>
+    </div>
   </div>
 </div>
 
@@ -1284,7 +1298,7 @@ async function usuariosToggleAtivo(id){
   if(!u) return;
   const novoAtivo = u.ativo===false ? true : false;
   const acao = novoAtivo ? "reativar" : "desativar";
-  if(!confirm(`Quer ${acao} o acesso de ${u.nome||u.email}?${novoAtivo?"":" A pessoa não conseguirá mais usar o sistema (mesmo que o login dela no Supabase continue existindo)."}`)) return;
+  if(!(await showAppConfirm(`Quer ${acao} o acesso de ${u.nome||u.email}?${novoAtivo?"":" A pessoa não conseguirá mais usar o sistema (mesmo que o login dela no Supabase continue existindo)."}`))) return;
   const { error } = await sb.from("profiles").update({ ativo: novoAtivo }).eq("id", id);
   if(error){ showAppAlert("Erro ao atualizar: " + error.message); return; }
   await usuariosLoad(); usuariosRenderModal();
@@ -1379,7 +1393,7 @@ function parametrosRender(){
   body.querySelectorAll("[data-del]").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       const p = parametrosData[Number(btn.dataset.del)];
-      if(!confirm(`Excluir a vigência de ${fmtDateBR(p.vigencia_inicio)}? Licitações com data anterior a esta passarão a usar a vigência anterior disponível.`)) return;
+      if(!(await showAppConfirm(`Excluir a vigência de ${fmtDateBR(p.vigencia_inicio)}? Licitações com data anterior a esta passarão a usar a vigência anterior disponível.`))) return;
       const { error } = await sb.from("parametros_financeiros").delete().eq("id", p.id);
       if(error){ showAppAlert("Erro ao excluir: " + error.message); return; }
       await parametrosLoad(); parametrosRender();
@@ -1510,7 +1524,7 @@ function wireBulkDelete(prefix, tableName, getFilteredRows, reloadAndRender){
   });
   document.getElementById(prefix+"-bulk-delete").addEventListener("click", async ()=>{
     if(selected.size===0) return;
-    if(!confirm(`Excluir ${selected.size} registro(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+    if(!(await showAppConfirm(`Excluir ${selected.size} registro(s) selecionado(s)? Esta ação não pode ser desfeita.`))) return;
     for(const id of [...selected]){
       const { error } = await sb.from(tableName).delete().eq("id", id);
       if(error){ console.error(error); showAppAlert("Erro ao excluir: "+error.message); continue; }
@@ -1567,7 +1581,7 @@ function clientesRender(searchTerm){
       delBtn.className = "icon-btn";
       delBtn.innerHTML = iconTrash + "Excluir";
       delBtn.addEventListener("click", async ()=>{
-        if(confirm("Excluir este cliente?")){
+        if(await showAppConfirm("Excluir este cliente?")){
           const { error } = await sb.from("clientes").delete().eq("id", c.id);
           if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
           await clientesLoad(); clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
@@ -1659,7 +1673,7 @@ function fornecedoresRender(searchTerm){
       delBtn.className = "icon-btn";
       delBtn.innerHTML = iconTrash + "Excluir";
       delBtn.addEventListener("click", async ()=>{
-        if(confirm("Excluir este fornecedor?")){
+        if(await showAppConfirm("Excluir este fornecedor?")){
           const { error } = await sb.from("fornecedores").delete().eq("id", f.id);
           if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
           await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
@@ -1752,7 +1766,7 @@ function produtosRender(searchTerm){
       delBtn.className = "icon-btn";
       delBtn.innerHTML = iconTrash + "Excluir";
       delBtn.addEventListener("click", async ()=>{
-        if(confirm("Excluir este produto?")){
+        if(await showAppConfirm("Excluir este produto?")){
           const { error } = await sb.from("produtos").delete().eq("id", p.id);
           if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
           await produtosLoad(); produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
@@ -1844,6 +1858,32 @@ function closeAppAlert(){ appAlertOverlay.classList.remove("active"); }
 appAlertOkBtn.addEventListener("click", closeAppAlert);
 appAlertOverlay.addEventListener("click", (e)=>{ if(e.target === appAlertOverlay) closeAppAlert(); });
 document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && appAlertOverlay.classList.contains("active")) closeAppAlert(); });
+
+/* ============ MODAL DE CONFIRMAÇÃO (substitui confirm() nativo) ============ */
+const appConfirmOverlay = document.getElementById("app-confirm-overlay");
+const appConfirmTitle = document.getElementById("app-confirm-title");
+const appConfirmMessage = document.getElementById("app-confirm-message");
+const appConfirmOkBtn = document.getElementById("app-confirm-ok-btn");
+const appConfirmCancelBtn = document.getElementById("app-confirm-cancel-btn");
+let appConfirmResolve = null;
+function showAppConfirm(message, opts){
+  opts = opts || {};
+  appConfirmTitle.textContent = opts.title || "Confirmar ação";
+  appConfirmMessage.textContent = message;
+  appConfirmOkBtn.textContent = opts.okLabel || "Continuar";
+  appConfirmCancelBtn.textContent = opts.cancelLabel || "Cancelar";
+  appConfirmOverlay.classList.add("active");
+  setTimeout(()=> appConfirmOkBtn.focus(), 50);
+  return new Promise((resolve)=>{ appConfirmResolve = resolve; });
+}
+function closeAppConfirm(result){
+  appConfirmOverlay.classList.remove("active");
+  if(appConfirmResolve){ appConfirmResolve(result); appConfirmResolve = null; }
+}
+appConfirmOkBtn.addEventListener("click", ()=> closeAppConfirm(true));
+appConfirmCancelBtn.addEventListener("click", ()=> closeAppConfirm(false));
+appConfirmOverlay.addEventListener("click", (e)=>{ if(e.target === appConfirmOverlay) closeAppConfirm(false); });
+document.addEventListener("keydown", (e)=>{ if(e.key === "Escape" && appConfirmOverlay.classList.contains("active")) closeAppConfirm(false); });
 
 /* ============ MODAL GENÉRICO ============ */
 const modalOverlay = document.getElementById("modal-overlay");
@@ -2334,7 +2374,7 @@ function licRender(){
     delBtn.innerHTML = iconTrash + "Excluir";
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
-      if(confirm("Excluir esta linha?")){
+      if(await showAppConfirm("Excluir esta linha?")){
         const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         licSelectedIds.delete(r.id);
@@ -2558,7 +2598,7 @@ document.getElementById("lic-bulk-apply-data").addEventListener("click", async (
 document.getElementById("lic-bulk-delete").addEventListener("click", async ()=>{
   if(licSelectedIds.size === 0) return;
   const selecionados = licData.filter(r=>licSelectedIds.has(r.id));
-  if(!confirm(`Excluir ${selecionados.length} registro(s) de licitação selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+  if(!(await showAppConfirm(`Excluir ${selecionados.length} registro(s) de licitação selecionado(s)? Esta ação não pode ser desfeita.`))) return;
   for(const r of selecionados){
     const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
     if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
@@ -3075,7 +3115,7 @@ function pedidosRender(searchTerm){
     delBtn.innerHTML = iconTrash + "Excluir";
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
-      if(confirm("Excluir este pedido?")){
+      if(await showAppConfirm("Excluir este pedido?")){
         const { error } = await sb.from("pedidos").delete().eq("id", p.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         pedidosSelectedIds.delete(p.id);
@@ -3510,8 +3550,8 @@ document.getElementById("ped-bulk-apply-status").addEventListener("click", async
   const status = document.getElementById("ped-bulk-status").value;
   if(!status){ showAppAlert("Selecione o novo status a aplicar."); return; }
   const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  if(status === "Enviado" && !confirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado" e duplicados para Licitações. Continuar?`)) return;
-  if(status === "Selecionado pra compra" && !confirm(`${selecionados.length} pedido(s) selecionado(s) serão movidos para a aba Planejamento. Continuar?`)) return;
+  if(status === "Enviado" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado" e duplicados para Licitações. Continuar?`))) return;
+  if(status === "Selecionado pra compra" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão movidos para a aba Planejamento. Continuar?`))) return;
   for(const p of selecionados){
     const payload = { status };
     if(status === "Comprado" || status === "Enviado" || status === "Selecionado pra compra") payload.comprado = true;
@@ -3555,7 +3595,7 @@ document.getElementById("ped-bulk-apply-data-envio").addEventListener("click", a
 document.getElementById("ped-bulk-delete").addEventListener("click", async ()=>{
   if(pedidosSelectedIds.size === 0) return;
   const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  if(!confirm(`Excluir ${selecionados.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+  if(!(await showAppConfirm(`Excluir ${selecionados.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`))) return;
   for(const p of selecionados){
     const { error } = await sb.from("pedidos").delete().eq("id", p.id);
     if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
@@ -3581,7 +3621,6 @@ function planToDbPayload(item){
 function planFromDbRow(r){
   return {
     id: r.id,
-    pedidoOrigemId: r.pedido_origem_id || null,
     fornecedor: r.fornecedor_nome || "",
     produto: r.produto_nome || "",
     quantidade: r.quantidade,
@@ -3602,23 +3641,6 @@ function planCompute(values){
   const pu = parseFloat(values.precoUnitario) || 0;
   return { valorTotal: q*pu };
 }
-function planRenderFornecedorSummary(){
-  const wrap = document.getElementById("plan-fornecedor-summary");
-  if(!wrap) return;
-  const totals = new Map();
-  planData.forEach(p=>{
-    const key = p.fornecedor || "Sem fornecedor";
-    const totalCompra = (parseFloat(p.quantidade)||0) * (parseFloat(p.precoCompra)||0);
-    totals.set(key, (totals.get(key)||0) + totalCompra);
-  });
-  if(totals.size === 0){ wrap.innerHTML = ""; return; }
-  const entries = [...totals.entries()].sort((a,b)=>b[1]-a[1]);
-  wrap.innerHTML = entries.map(([fornecedor, total])=>`
-    <div class="kpi">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg></div>
-      <div><div class="label">${fornecedor}</div><div class="value">${fmtCurrency(total)}</div></div>
-    </div>`).join("");
-}
 function planPopulateFornecedorFilter(){
   const sel = document.getElementById("plan-fornecedor-filter");
   const fornecedores = new Set(planData.map(p=>p.fornecedor).filter(Boolean));
@@ -3638,7 +3660,6 @@ function planUpdateBulkBar(){
   document.getElementById("plan-bulk-count").textContent = n + " selecionado(s)";
 }
 function planRender(searchTerm){
-  planRenderFornecedorSummary();
   const tbody = document.getElementById("plan-body");
   tbody.innerHTML = "";
   const fornecedorFilter = document.getElementById("plan-fornecedor-filter").value;
@@ -3690,7 +3711,7 @@ function planRender(searchTerm){
     delBtn.innerHTML = iconTrash + "Excluir";
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
-      if(confirm("Excluir este item de planejamento?")){
+      if(await showAppConfirm("Excluir este item de planejamento?")){
         const { error } = await sb.from("planejamento").delete().eq("id", p.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         planSelectedIds.delete(p.id);
@@ -3731,7 +3752,7 @@ function planOpenForm(existingIndex){
 
       // Selecionar um status aqui devolve o item para a tela de Pedidos com o status escolhido
       if(values.statusPedido && values.statusPedido !== "Manter em Planejamento"){
-        const camposAtualizados = {
+        const pedidoPayload = {
           fornecedor_nome: values.fornecedor.trim() || null,
           fornecedor_id: findIdByName(fornecedoresData, values.fornecedor),
           material: values.produto.trim() || null,
@@ -3742,16 +3763,8 @@ function planOpenForm(existingIndex){
           status: values.statusPedido,
           comprado: values.statusPedido === "Comprado" || values.statusPedido === "Enviado",
         };
-        // Se o item de planejamento se originou de um pedido (pedido_origem_id), atualizamos
-        // o pedido original em vez de criar um novo — preservando licitante, número, empenho,
-        // datas e observação que já estavam salvos nele.
-        if(existing?.pedidoOrigemId){
-          const { error: updErr } = await sb.from("pedidos").update(camposAtualizados).eq("id", existing.pedidoOrigemId);
-          if(updErr){ showAppAlert("Erro ao devolver para Pedidos: "+updErr.message); return false; }
-        } else {
-          const { error: insErr } = await sb.from("pedidos").insert(camposAtualizados);
-          if(insErr){ showAppAlert("Erro ao devolver para Pedidos: "+insErr.message); return false; }
-        }
+        const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
+        if(insErr){ showAppAlert("Erro ao devolver para Pedidos: "+insErr.message); return false; }
         if(existing){
           const { error: delErr } = await sb.from("planejamento").delete().eq("id", existing.id);
           if(delErr) console.error(delErr);
@@ -3848,9 +3861,9 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
   const status = document.getElementById("plan-bulk-status").value;
   if(!status){ showAppAlert("Selecione o status de destino em Pedidos."); return; }
   const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
-  if(!confirm(`Mover ${selecionados.length} item(ns) para Pedidos com status "${status}"?`)) return;
+  if(!(await showAppConfirm(`Mover ${selecionados.length} item(ns) para Pedidos com status "${status}"?`))) return;
   for(const p of selecionados){
-    const camposAtualizados = {
+    const pedidoPayload = {
       fornecedor_nome: p.fornecedor || null,
       fornecedor_id: findIdByName(fornecedoresData, p.fornecedor),
       material: p.produto || null,
@@ -3861,15 +3874,8 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
       status: status,
       comprado: status === "Comprado" || status === "Enviado",
     };
-    // Preserva os dados do pedido original (licitante, número, empenho, datas, observação)
-    // atualizando-o em vez de criar um novo registro, quando houver origem rastreada.
-    let opErr;
-    if(p.pedidoOrigemId){
-      ({error: opErr} = await sb.from("pedidos").update(camposAtualizados).eq("id", p.pedidoOrigemId));
-    } else {
-      ({error: opErr} = await sb.from("pedidos").insert(camposAtualizados));
-    }
-    if(opErr){ console.error(opErr); showAppAlert("Erro ao devolver item para Pedidos: "+opErr.message); continue; }
+    const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
+    if(insErr){ console.error(insErr); showAppAlert("Erro ao devolver item para Pedidos: "+insErr.message); continue; }
     const { error: delErr } = await sb.from("planejamento").delete().eq("id", p.id);
     if(delErr) console.error(delErr);
     planSelectedIds.delete(p.id);
@@ -3881,7 +3887,7 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
 document.getElementById("plan-bulk-delete").addEventListener("click", async ()=>{
   if(planSelectedIds.size === 0) return;
   const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
-  if(!confirm(`Excluir ${selecionados.length} item(ns) de planejamento selecionado(s)?`)) return;
+  if(!(await showAppConfirm(`Excluir ${selecionados.length} item(ns) de planejamento selecionado(s)?`))) return;
   for(const p of selecionados){
     const { error } = await sb.from("planejamento").delete().eq("id", p.id);
     if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
@@ -3969,7 +3975,7 @@ function contasRender(searchTerm){
     delBtn.innerHTML = iconTrash + "Excluir";
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
-      if(confirm("Excluir este registro?")){
+      if(await showAppConfirm("Excluir este registro?")){
         const { error } = await sb.from("contas_pagar").delete().eq("id", c.id);
         if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
         await contasLoad(); contasRender(""); renderContasKpis(); checkContasAlerts();
