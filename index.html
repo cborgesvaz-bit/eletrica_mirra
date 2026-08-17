@@ -4023,60 +4023,141 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
 function pcEsc(s){
   return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
+const PC_ENDERECO_PADRAO = "Rua Claudia, 659 - Vila Marieta - CEP: 03617-000";
+function pcLogoSrc(){
+  const img = document.querySelector("header img");
+  return img && img.src ? img.src : "";
+}
 function pcBuildDoc(grupos, dataPedido, observacoes){
   const dataFmt = (()=>{ const [a,m,d] = String(dataPedido||"").split("-"); return (a&&m&&d) ? `${d}/${m}/${a}` : String(dataPedido||""); })();
+  const logo = pcLogoSrc();
+  const seq = (()=>{ const n = new Date(); return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}`; })();
   const blocos = grupos.map((g, i)=>{
+    const qtdTotal = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0), 0);
     const total = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0) * (parseFloat(it.precoCompra)||0), 0);
-    const linhas = g.itens.map(it=>{
+    const linhas = g.itens.map((it, n)=>{
       const q = parseFloat(it.quantidade)||0;
       const pc = parseFloat(it.precoCompra)||0;
       return `<tr>
+        <td class="idx">${String(n+1).padStart(2,"0")}</td>
         <td>${pcEsc(it.produto || "-")}</td>
         <td class="num">${fmtNum2(q)}</td>
         <td class="num">${fmtCurrency(pc)}</td>
-        <td class="num">${fmtCurrency(q*pc)}</td>
+        <td class="num strong">${fmtCurrency(q*pc)}</td>
       </tr>`;
     }).join("");
-    return `<section class="pc" ${i>0 ? 'style="page-break-before:always;"' : ""}>
-      <header>
-        <h1>Pedido de Compra</h1>
-        <div class="meta">
-          <div><span>Fornecedor</span><strong>${pcEsc(g.fornecedor)}</strong></div>
-          <div><span>Data do Pedido</span><strong>${pcEsc(dataFmt)}</strong></div>
+    return `<article class="doc" ${i>0 ? 'style="page-break-before:always;"' : ""}>
+      <header class="top">
+        <div class="brand">
+          ${logo ? `<img class="logo" src="${logo}" alt="Elétrica Mirra">` : `<div class="logo-fallback">EM</div>`}
+          <div class="brand-txt">
+            <strong>Elétrica Mirra</strong>
+            <span>Materiais Elétricos e Suprimentos</span>
+          </div>
+        </div>
+        <div class="doc-id">
+          <h1>Pedido de Compra</h1>
+          <div class="doc-id-line"><span>Nº</span><b>${seq}-${String(i+1).padStart(2,"0")}</b></div>
+          <div class="doc-id-line"><span>Data</span><b>${pcEsc(dataFmt)}</b></div>
         </div>
       </header>
+
+      <section class="card">
+        <span class="card-label">Fornecedor / Destinatário</span>
+        <div class="card-value">${pcEsc(g.fornecedor)}</div>
+      </section>
+
       <table>
-        <thead><tr><th>Produto</th><th class="num">Quantidade</th><th class="num">Preço Unit. (compra)</th><th class="num">Total</th></tr></thead>
+        <thead>
+          <tr>
+            <th class="idx">#</th>
+            <th>Produto</th>
+            <th class="num">Qtd.</th>
+            <th class="num">Preço Unit.</th>
+            <th class="num">Total</th>
+          </tr>
+        </thead>
         <tbody>${linhas}</tbody>
-        <tfoot><tr><td colspan="3" class="num">Total do pedido</td><td class="num">${fmtCurrency(total)}</td></tr></tfoot>
       </table>
-      ${observacoes ? `<div class="obs"><span>Observações / Instruções</span><p>${pcEsc(observacoes).replace(/\n/g,"<br>")}</p></div>` : ""}
-    </section>`;
+
+      <div class="bottom">
+        <div class="obs">
+          <span class="card-label">Observações / Instruções</span>
+          <p>${observacoes ? pcEsc(observacoes).replace(/\n/g,"<br>") : "&mdash;"}</p>
+        </div>
+        <div class="totais">
+          <div class="tot-line"><span>Itens</span><b>${g.itens.length}</b></div>
+          <div class="tot-line"><span>Quantidade total</span><b>${fmtNum2(qtdTotal)}</b></div>
+          <div class="tot-line grand"><span>Total do pedido</span><b>${fmtCurrency(total)}</b></div>
+        </div>
+      </div>
+
+      <div class="assinaturas">
+        <div class="ass"><i></i><span>Solicitante — Elétrica Mirra</span></div>
+        <div class="ass"><i></i><span>Ciente — ${pcEsc(g.fornecedor)}</span></div>
+      </div>
+
+      <footer class="rodape">
+        <span>Elétrica Mirra — Pedido de Compra</span>
+        <span>Emitido em ${pcEsc(dataFmt)} · página ${i+1} de ${grupos.length}</span>
+      </footer>
+    </article>`;
   }).join("");
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<title>Pedido de Compra — ${pcEsc(dataFmt)}</title>
+<title>Pedido de Compra ${pcEsc(seq)}</title>
 <style>
+  @page{size:A4;margin:14mm 12mm;}
   *{box-sizing:border-box;}
-  body{font-family:'Segoe UI',Arial,sans-serif;color:#14213d;margin:0;padding:28px;background:#fff;}
-  .pc{max-width:820px;margin:0 auto 32px;}
-  header{border-bottom:3px solid #ffc300;padding-bottom:12px;margin-bottom:18px;}
-  h1{font-size:22px;margin:0 0 12px;letter-spacing:.02em;}
-  .meta{display:flex;gap:40px;flex-wrap:wrap;}
-  .meta span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;}
-  .meta strong{font-size:14px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th,td{border:1px solid #e5e7eb;padding:8px 10px;text-align:left;}
-  th{background:#f3f4f6;font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
-  .num{text-align:right;}
-  tfoot td{font-weight:700;background:#fafafa;}
-  .obs{margin-top:18px;}
-  .obs span{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;}
-  .obs p{margin:6px 0 0;font-size:13px;white-space:pre-wrap;}
-  @media print{body{padding:0;} .pc{margin-bottom:0;}}
+  body{margin:0;background:#eef1f4;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:#0d2438;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .doc{background:#fff;max-width:820px;margin:24px auto;padding:34px 38px 26px;box-shadow:0 2px 14px rgba(13,36,56,.12);position:relative;}
+  .doc:before{content:"";position:absolute;left:0;top:0;width:100%;height:6px;background:linear-gradient(90deg,#0d2438 0 62%,#f5a623 62% 100%);}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding-bottom:16px;border-bottom:1px solid #e3e8ed;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .logo{height:52px;width:auto;object-fit:contain;}
+  .logo-fallback{height:52px;width:52px;border-radius:8px;background:#0d2438;color:#f5a623;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;}
+  .brand-txt strong{display:block;font-size:15px;letter-spacing:.02em;}
+  .brand-txt span{display:block;font-size:10.5px;color:#6b7c8c;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;}
+  .doc-id{text-align:right;}
+  .doc-id h1{margin:0 0 8px;font-size:19px;letter-spacing:.04em;text-transform:uppercase;color:#0d2438;}
+  .doc-id-line{font-size:12px;color:#6b7c8c;}
+  .doc-id-line span{display:inline-block;min-width:34px;text-transform:uppercase;font-size:10px;letter-spacing:.06em;}
+  .doc-id-line b{color:#0d2438;font-size:12.5px;}
+  .card{margin:18px 0 16px;background:#f7f9fb;border-left:4px solid #f5a623;padding:10px 14px;}
+  .card-label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#7b8b99;}
+  .card-value{font-size:15px;font-weight:700;margin-top:3px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{background:#0d2438;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;padding:9px 10px;text-align:left;}
+  tbody td{padding:9px 10px;border-bottom:1px solid #e9edf1;vertical-align:top;}
+  tbody tr:nth-child(even){background:#fafbfc;}
+  .num{text-align:right;white-space:nowrap;}
+  .idx{width:34px;text-align:center;color:#93a2ae;}
+  th.idx{color:#93a2ae;}
+  .strong{font-weight:700;}
+  .bottom{display:flex;gap:24px;margin-top:20px;align-items:flex-start;}
+  .obs{flex:1;}
+  .obs p{margin:5px 0 0;font-size:12.5px;line-height:1.5;white-space:pre-wrap;min-height:46px;border:1px dashed #dbe2e8;padding:8px 10px;}
+  .totais{width:250px;flex:none;border:1px solid #e3e8ed;}
+  .tot-line{display:flex;justify-content:space-between;padding:7px 12px;font-size:12px;border-bottom:1px solid #eef2f5;}
+  .tot-line span{color:#6b7c8c;}
+  .tot-line.grand{background:#0d2438;color:#fff;border-bottom:none;padding:11px 12px;}
+  .tot-line.grand span{color:#f5a623;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;align-self:center;}
+  .tot-line.grand b{font-size:15px;}
+  .assinaturas{display:flex;gap:48px;margin-top:42px;}
+  .ass{flex:1;text-align:center;}
+  .ass i{display:block;border-top:1px solid #9fb0bd;margin-bottom:6px;}
+  .ass span{font-size:10.5px;color:#6b7c8c;text-transform:uppercase;letter-spacing:.05em;}
+  .rodape{display:flex;justify-content:space-between;margin-top:26px;padding-top:10px;border-top:1px solid #e3e8ed;font-size:10px;color:#93a2ae;text-transform:uppercase;letter-spacing:.05em;}
+  @media print{
+    body{background:#fff;}
+    .doc{box-shadow:none;margin:0;padding:0 0 8px;max-width:none;}
+    .doc:before{position:static;display:block;}
+    tbody tr{page-break-inside:avoid;}
+  }
 </style></head><body>${blocos}
-<script>window.onload=function(){window.print();}<\/script>
+<script>window.onload=function(){setTimeout(function(){window.print();},250);}<\/script>
 </body></html>`;
 }
+
 document.getElementById("plan-bulk-pedido-compra").addEventListener("click", ()=>{
   if(planSelectedIds.size === 0) return;
   const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
@@ -4101,7 +4182,7 @@ document.getElementById("plan-bulk-pedido-compra").addEventListener("click", ()=
       {key:"dataPedido", label:"Data do Pedido", type:"date", value: hojeISO},
       {key:"destinatarios", label:"Fornecedores / Destinatários", value: grupos.map(g=>g.fornecedor).join(", "), readonly:true},
       {key:"resumo", label:`Itens selecionados (${selecionados.length}) — 1 pedido por fornecedor`, type:"textarea", value: resumo, readonly:true, full:true},
-      {key:"observacoes", label:"Observações / Instruções", type:"textarea", value:"", full:true},
+      {key:"observacoes", label:"Observações / Instruções", type:"textarea", value: PC_ENDERECO_PADRAO, full:true},
     ],
     onSave: async (values)=>{
       if(!values.dataPedido){ showAppAlert("Informe a Data do Pedido."); return false; }
