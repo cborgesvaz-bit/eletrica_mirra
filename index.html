@@ -817,6 +817,10 @@
         <option value="Comprado">Comprado</option>
         <option value="Enviado">Enviado</option>
       </select>
+      <button class="btn" id="plan-bulk-pedido-compra">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span id="plan-bulk-pedido-compra-label">Criar Pedido de Compra</span>
+      </button>
       <button class="btn secondary" id="plan-bulk-move">Mover selecionados</button>
       <button class="btn secondary" id="plan-bulk-delete">Excluir selecionados</button>
     </div>
@@ -3757,6 +3761,8 @@ function planUpdateBulkBar(){
   if(n === 0){ bar.style.display = "none"; return; }
   bar.style.display = "flex";
   document.getElementById("plan-bulk-count").textContent = n + " selecionado(s)";
+  const lbl = document.getElementById("plan-bulk-pedido-compra-label");
+  if(lbl) lbl.textContent = `Criar Pedido de Compra (${n} ${n === 1 ? "item" : "itens"})`;
 }
 function planRender(searchTerm){
   const tbody = document.getElementById("plan-body");
@@ -4012,6 +4018,100 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
   document.getElementById("plan-bulk-status").value = "";
   await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
   await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+});
+/* ---- Pedido de Compra (gerado a partir da seleção do Planejamento) ---- */
+function pcEsc(s){
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function pcBuildDoc(grupos, dataPedido, observacoes){
+  const dataFmt = (()=>{ const [a,m,d] = String(dataPedido||"").split("-"); return (a&&m&&d) ? `${d}/${m}/${a}` : String(dataPedido||""); })();
+  const blocos = grupos.map((g, i)=>{
+    const total = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0) * (parseFloat(it.precoCompra)||0), 0);
+    const linhas = g.itens.map(it=>{
+      const q = parseFloat(it.quantidade)||0;
+      const pc = parseFloat(it.precoCompra)||0;
+      return `<tr>
+        <td>${pcEsc(it.produto || "-")}</td>
+        <td class="num">${fmtNum2(q)}</td>
+        <td class="num">${fmtCurrency(pc)}</td>
+        <td class="num">${fmtCurrency(q*pc)}</td>
+      </tr>`;
+    }).join("");
+    return `<section class="pc" ${i>0 ? 'style="page-break-before:always;"' : ""}>
+      <header>
+        <h1>Pedido de Compra</h1>
+        <div class="meta">
+          <div><span>Fornecedor</span><strong>${pcEsc(g.fornecedor)}</strong></div>
+          <div><span>Data do Pedido</span><strong>${pcEsc(dataFmt)}</strong></div>
+        </div>
+      </header>
+      <table>
+        <thead><tr><th>Produto</th><th class="num">Quantidade</th><th class="num">Preço Unit. (compra)</th><th class="num">Total</th></tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr><td colspan="3" class="num">Total do pedido</td><td class="num">${fmtCurrency(total)}</td></tr></tfoot>
+      </table>
+      ${observacoes ? `<div class="obs"><span>Observações / Instruções</span><p>${pcEsc(observacoes).replace(/\n/g,"<br>")}</p></div>` : ""}
+    </section>`;
+  }).join("");
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Pedido de Compra — ${pcEsc(dataFmt)}</title>
+<style>
+  *{box-sizing:border-box;}
+  body{font-family:'Segoe UI',Arial,sans-serif;color:#14213d;margin:0;padding:28px;background:#fff;}
+  .pc{max-width:820px;margin:0 auto 32px;}
+  header{border-bottom:3px solid #ffc300;padding-bottom:12px;margin-bottom:18px;}
+  h1{font-size:22px;margin:0 0 12px;letter-spacing:.02em;}
+  .meta{display:flex;gap:40px;flex-wrap:wrap;}
+  .meta span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;}
+  .meta strong{font-size:14px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{border:1px solid #e5e7eb;padding:8px 10px;text-align:left;}
+  th{background:#f3f4f6;font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+  .num{text-align:right;}
+  tfoot td{font-weight:700;background:#fafafa;}
+  .obs{margin-top:18px;}
+  .obs span{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:700;}
+  .obs p{margin:6px 0 0;font-size:13px;white-space:pre-wrap;}
+  @media print{body{padding:0;} .pc{margin-bottom:0;}}
+</style></head><body>${blocos}
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+}
+document.getElementById("plan-bulk-pedido-compra").addEventListener("click", ()=>{
+  if(planSelectedIds.size === 0) return;
+  const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
+  const grupos = [];
+  const mapa = new Map();
+  for(const p of selecionados){
+    const key = (p.fornecedor || "").trim() || "(Sem fornecedor)";
+    if(!mapa.has(key)){ const g = {fornecedor:key, itens:[]}; mapa.set(key, g); grupos.push(g); }
+    mapa.get(key).itens.push(p);
+  }
+  grupos.sort((a,b)=>a.fornecedor.localeCompare(b.fornecedor,"pt-BR"));
+  const hoje = new Date();
+  const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
+  const resumo = grupos.map(g=>{
+    const total = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0)*(parseFloat(it.precoCompra)||0), 0);
+    return `${g.fornecedor}: ${g.itens.length} item(ns) — ${fmtCurrency(total)}`;
+  }).join("\n");
+  openModal({
+    title: "Criar Pedido de Compra",
+    icon: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6Z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>',
+    fields: [
+      {key:"dataPedido", label:"Data do Pedido", type:"date", value: hojeISO},
+      {key:"destinatarios", label:"Fornecedores / Destinatários", value: grupos.map(g=>g.fornecedor).join(", "), readonly:true},
+      {key:"resumo", label:`Itens selecionados (${selecionados.length}) — 1 pedido por fornecedor`, type:"textarea", value: resumo, readonly:true, full:true},
+      {key:"observacoes", label:"Observações / Instruções", type:"textarea", value:"", full:true},
+    ],
+    onSave: async (values)=>{
+      if(!values.dataPedido){ showAppAlert("Informe a Data do Pedido."); return false; }
+      const html = pcBuildDoc(grupos, values.dataPedido, (values.observacoes||"").trim());
+      const win = window.open("", "_blank");
+      if(!win){ showAppAlert("Não foi possível abrir a janela do pedido. Libere os pop-ups para este site."); return false; }
+      win.document.open(); win.document.write(html); win.document.close();
+      return true;
+    }
+  });
 });
 document.getElementById("plan-bulk-delete").addEventListener("click", async ()=>{
   if(planSelectedIds.size === 0) return;
