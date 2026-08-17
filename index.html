@@ -2969,22 +2969,121 @@ function pedidosUpdateBulkBar(){
   document.getElementById("ped-bulk-count").textContent = n + " selecionado(s)";
 }
 
-// Duplica o pedido para Licitações quando o status muda para "Enviado" (mesma regra do form individual)
+/* ---- Integração Pedidos → Licitações (consolidação por pedido) ----
+   Regra: um pedido é transferido para Licitações quando, no mesmo pedido
+   (chave = Nº Pedido + Licitante + Empenho), houver itens com status
+   "Enviado" E Data de Envio preenchida. Todos os itens elegíveis do pedido
+   são consolidados em UM único registro de licitação:
+     - Valor Total da Compra = Σ (quantidade × preço de compra)
+     - Valor Total da Venda  = Σ (quantidade × preço de venda)
+     - Produto  = união dos materiais do pedido
+     - Data de Envio = a data originalmente preenchida (a mais antiga do pedido)
+   O registro é criado na primeira sincronização e ATUALIZADO (upsert por
+   chave) nas seguintes, evitando duplicidade em Licitações. */
+function pedidoNorm(v){ return (v==null ? "" : String(v)).trim().toLowerCase(); }
+function pedidoChave(item){
+  return [pedidoNorm(item.numero), pedidoNorm(item.licitante), pedidoNorm(item.empenho)].join("||");
+}
+// Aceita tanto a linha crua do banco (colunas snake_case) quanto a linha já
+// mapeada para licData (chaves com rótulo, ex.: "Nº Pedido").
+function licChave(r){
+  const numero  = r.numero_pedido ?? r["Nº Pedido"];
+  const cliente = r.cliente_nome  ?? r["Cliente"];
+  const empenho = r.empenho       ?? r["Empenho"];
+  return [pedidoNorm(numero), pedidoNorm(cliente), pedidoNorm(empenho)].join("||");
+}
+function pedidoItemElegivel(p){
+  return p.status === "Enviado" && !!p.dataEnvio;
+}
+// Reúne os itens do mesmo pedido, aplicando por cima o estado mais recente
+// do item que acabou de ser salvo (pedidosData pode estar desatualizado).
+function pedidosItensDoPedido(item){
+  const chave = pedidoChave(item);
+  const mapa = new Map();
+  (pedidosData || []).forEach(p=>{
+    if(pedidoChave(p) === chave) mapa.set(p.id, p);
+  });
+  if(item.id) mapa.set(item.id, item);
+  else mapa.set("__novo__", item);
+  return [...mapa.values()].filter(pedidoItemElegivel);
+}
+function pedidosConsolidarLicitacao(itens){
+  let valorCompra = 0, valorVenda = 0;
+  const materiais = [], observacoes = [];
+  let dataEnvio = null;
+  itens.forEach(p=>{
+    const q  = parseFloat(p.quantidade)  || 0;
+    const pc = parseFloat(p.precoCompra) || 0;
+    const pv = parseFloat(p.precoVenda)  || 0;
+    valorCompra += q * pc;
+    valorVenda  += q * pv;
+    const mat = (p.material || "").trim();
+    if(mat && !materiais.includes(mat)) materiais.push(mat);
+    const obs = (p.observacao || "").trim();
+    if(obs && !observacoes.includes(obs)) observacoes.push(obs);
+    if(p.dataEnvio && (!dataEnvio || p.dataEnvio < dataEnvio)) dataEnvio = p.dataEnvio;
+  });
+  return {
+    valor_compra: valorCompra,
+    valor_receber_total: valorVenda,
+    produto: materiais.join(" | ") || null,
+    observacao_geral: observacoes.join(" | ") || null,
+    data_envio: dataEnvio || null,
+  };
+}
+// Sincroniza (cria ou atualiza) o registro consolidado do pedido em Licitações.
 async function pedidosDuplicarParaLicitacoes(item){
+  const itens = pedidosItensDoPedido(item);
+  if(itens.length === 0) return true; // nenhum item elegível ainda
+
+  const cons = pedidosConsolidarLicitacao(itens);
   const licPayload = {
     empenho: item.empenho || null,
     numero_pedido: item.numero || null,
-    data_envio: item.dataEnvio || null,
+    data_envio: cons.data_envio,
     cliente_id: findIdByName(clientesData, item.licitante),
     cliente_nome: item.licitante || null,
-    valor_compra: parseFloat(item.precoCompra && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoCompra)) : 0) || 0,
-    valor_receber_total: parseFloat(item.precoVenda && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoVenda)) : 0) || 0,
-    produto: item.material || null,
-    observacao_geral: item.observacao || null,
+    valor_compra: cons.valor_compra,
+    valor_receber_total: cons.valor_receber_total,
+    produto: cons.produto,
+    observacao_geral: cons.observacao_geral,
   };
-  const { error: licErr } = await sb.from("licitacoes").insert(licPayload);
+
+  // Upsert por chave: procura registro já existente para este pedido
+  const chave = pedidoChave(item);
+  let existente = (licData || []).find(r => licChave(r) === chave);
+  if(!existente){
+    let q = sb.from("licitacoes").select("id,numero_pedido,cliente_nome,empenho");
+    q = (item.numero && String(item.numero).trim()) ? q.eq("numero_pedido", item.numero) : q.is("numero_pedido", null);
+    const { data: achados, error: buscaErr } = await q;
+    if(buscaErr){ console.error(buscaErr); }
+    existente = (achados || []).find(r => licChave(r) === chave);
+  }
+
+  let licErr;
+  if(existente){
+    ({ error: licErr } = await sb.from("licitacoes").update(licPayload).eq("id", existente.id));
+  } else {
+    ({ error: licErr } = await sb.from("licitacoes").insert(licPayload));
+  }
   if(licErr) console.error(licErr);
   return !licErr;
+}
+
+// Sincroniza uma vez por PEDIDO (não por item) os pedidos afetados por uma ação
+// em lote. Deve ser chamada APÓS pedidosLoad(), para trabalhar com dados atuais.
+async function pedidosSincronizarPedidosTocados(itensAfetados){
+  await licLoad();
+  const chavesTocadas = new Set((itensAfetados || []).map(pedidoChave));
+  const jaSincronizados = new Set();
+  for(const p of pedidosData){
+    const ch = pedidoChave(p);
+    if(!chavesTocadas.has(ch) || jaSincronizados.has(ch)) continue;
+    if(!pedidoItemElegivel(p)) continue;
+    jaSincronizados.add(ch);
+    await pedidosDuplicarParaLicitacoes(p);
+  }
+  await licLoad();
 }
 
 function pedidosRowSubTab(p){
@@ -3493,23 +3592,12 @@ function pedidosOpenForm(existingIndex){
       }
       if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return false; }
 
-      // Integração: pedido que passa a "Enviado" é duplicado para Licitações, mantendo os dados intactos
-      if(item.status === "Enviado" && statusAnterior !== "Enviado"){
-        const licPayload = {
-          empenho: item.empenho || null,
-          numero_pedido: item.numero || null,
-          data_envio: item.dataEnvio || null,
-          cliente_id: findIdByName(clientesData, item.licitante),
-          cliente_nome: item.licitante || null,
-          valor_compra: parseFloat(item.precoCompra && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoCompra)) : 0) || 0,
-          valor_receber_total: parseFloat(item.precoVenda && item.quantidade ? (parseFloat(item.quantidade)*parseFloat(item.precoVenda)) : 0) || 0,
-          produto: item.material || null,
-          observacao_geral: item.observacao || null,
-        };
-        const { error: licErr } = await sb.from("licitacoes").insert(licPayload);
-        if(licErr){
-          console.error(licErr);
-          showAppAlert("Pedido salvo, mas houve erro ao duplicar para Licitações: "+licErr.message);
+      // Integração: pedido "Enviado" com Data de Envio preenchida é consolidado
+      // (todos os itens do mesmo pedido em um único registro) na aba Licitações.
+      if(item.status === "Enviado" && item.dataEnvio){
+        const ok = await pedidosDuplicarParaLicitacoes({...item, id: savedId});
+        if(!ok){
+          showAppAlert("Pedido salvo, mas houve erro ao enviar/atualizar o consolidado em Licitações.");
         } else {
           await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
         }
@@ -3550,7 +3638,7 @@ document.getElementById("ped-bulk-apply-status").addEventListener("click", async
   const status = document.getElementById("ped-bulk-status").value;
   if(!status){ showAppAlert("Selecione o novo status a aplicar."); return; }
   const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  if(status === "Enviado" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado" e duplicados para Licitações. Continuar?`))) return;
+  if(status === "Enviado" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado". Os que tiverem Data de Envio preenchida serão consolidados por pedido (Nº Pedido + Licitante + Empenho) na aba Licitações. Continuar?`))) return;
   if(status === "Selecionado pra compra" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão movidos para a aba Planejamento. Continuar?`))) return;
   for(const p of selecionados){
     const payload = { status };
@@ -3558,13 +3646,16 @@ document.getElementById("ped-bulk-apply-status").addEventListener("click", async
     if(status === "À enviar") payload.comprado = false;
     const { error } = await sb.from("pedidos").update(payload).eq("id", p.id);
     if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); continue; }
-    if(status === "Enviado" && p.status !== "Enviado"){
-      await pedidosDuplicarParaLicitacoes({...p, status});
-    }
   }
   pedidosSelectedIds.clear();
   document.getElementById("ped-bulk-status").value = "";
   await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+  // Consolidação: uma sincronização por PEDIDO (não por item) após recarregar os dados
+  if(status === "Enviado"){
+    await pedidosSincronizarPedidosTocados(selecionados);
+    const semData = selecionados.filter(p => !p.dataEnvio).length;
+    if(semData > 0) showAppAlert(`${semData} item(ns) ficaram como "Enviado" sem Data de Envio e por isso não entraram no consolidado de Licitações. Preencha a Data de Envio para transferi-los.`);
+  }
   if(status === "Enviado"){ await licLoad(); licPopulateFilters(); licRender(); licRenderKpis(); }
   if(status === "Selecionado pra compra"){ await planLoad(); planRender(""); }
 });
@@ -3591,6 +3682,9 @@ document.getElementById("ped-bulk-apply-data-envio").addEventListener("click", a
   }
   document.getElementById("ped-bulk-data-envio").value = "";
   await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+  // Preencher a Data de Envio pode tornar o pedido elegível para Licitações
+  await pedidosSincronizarPedidosTocados(selecionados);
+  licPopulateFilters(); licRender(); licRenderKpis();
 });
 document.getElementById("ped-bulk-delete").addEventListener("click", async ()=>{
   if(pedidosSelectedIds.size === 0) return;
