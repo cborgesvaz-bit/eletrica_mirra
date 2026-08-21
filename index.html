@@ -575,33 +575,6 @@
   .usuario-btn-edit{background:#fdf1de;color:var(--yellow-2);border-color:#f5dcb0!important;}
   .usuario-btn-toggle{background:var(--bg);color:var(--muted);}
   .usuario-btn-toggle.reativar{background:rgba(30,158,107,0.1);color:var(--pos);border-color:#bfe6d5!important;}
-
-  /* ---- Modo somente leitura / sem exclusão (espelha o RLS do banco) ---- */
-  body.sem-escrita #lic-add, body.sem-escrita #lic-import, body.sem-escrita #lic-import-template,
-  body.sem-escrita #lic-bulk-apply-status, body.sem-escrita #lic-bulk-apply-data,
-  body.sem-escrita #ped-add, body.sem-escrita #ped-bulk-apply-status,
-  body.sem-escrita #ped-bulk-apply-data-compra, body.sem-escrita #ped-bulk-apply-data-envio,
-  body.sem-escrita #plan-bulk-apply, body.sem-escrita #plan-bulk-pedido-compra,
-  body.sem-escrita #plan-bulk-move,
-  body.sem-escrita #contas-add, body.sem-escrita #clientes-add,
-  body.sem-escrita #fornecedores-add, body.sem-escrita #produtos-add,
-  body.sem-escrita #parametros-add,
-  body.sem-escrita #modal-save-btn, body.sem-escrita #quickadd-modal-save-btn,
-  body.sem-escrita .icon-btn[data-edit]{
-    display:none!important;
-  }
-  body.sem-exclusao #lic-bulk-delete, body.sem-exclusao #ped-bulk-delete,
-  body.sem-exclusao #plan-bulk-delete, body.sem-exclusao #clientes-bulk-delete,
-  body.sem-exclusao #fornecedores-bulk-delete, body.sem-exclusao #produtos-bulk-delete,
-  body.sem-exclusao .icon-btn[data-del]{
-    display:none!important;
-  }
-  .aviso-leitura{
-    display:none; align-items:center; gap:8px; margin:0 0 14px;
-    padding:9px 13px; border-radius:9px; font-size:13px;
-    background:#fdf1de; color:var(--yellow-2); border:1px solid #f5dcb0;
-  }
-  body.sem-escrita .aviso-leitura{display:flex;}
 </style>
 </head>
 <body>
@@ -679,11 +652,6 @@
 </nav>
 
 <main>
-
-  <div class="aviso-leitura" id="aviso-leitura">
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-    <span>Seu perfil tem acesso <strong>somente leitura</strong>. Para criar ou alterar registros, peça a um administrador.</span>
-  </div>
 
   <!-- LICITAÇÕES -->
   <section id="view-licitacoes" class="view active">
@@ -1092,7 +1060,7 @@
         <label for="novo-usuario-email">E-mail</label>
         <input type="email" id="novo-usuario-email" placeholder="email@exemplo.com">
         <label for="novo-usuario-senha">Senha</label>
-        <input type="password" id="novo-usuario-senha" placeholder="Mínimo 10 caracteres, com maiúscula, número e símbolo">
+        <input type="password" id="novo-usuario-senha" placeholder="Mínimo 6 caracteres">
         <label>Perfil</label>
         <div class="perfil-toggle" id="novo-usuario-perfil">
           <button type="button" data-role="admin">Administrador</button>
@@ -1128,70 +1096,6 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 /* ============ AUTENTICAÇÃO E GESTÃO DE ACESSOS ============ */
 let currentUser = null;
 let currentProfile = null; // { id, email, role, created_at }
-
-/* ============ CONTROLE DE ESCRITA POR PERFIL ============
-   Espelha exatamente as policies de RLS do banco. O banco é quem manda —
-   isto aqui existe só para o usuário receber uma mensagem clara em vez de
-   um "salvo com sucesso" que não salvou nada.
-
-   admin        -> lê, cria, edita e exclui tudo
-   editor       -> lê, cria e edita; NÃO exclui; não mexe em parâmetros
-   demais       -> somente leitura
-   ativo=false  -> nada                                                      */
-
-const TABELAS_SO_ADMIN = ["parametros_financeiros", "profiles"];
-
-function perfilAtivo(){
-  return !!currentProfile && currentProfile.ativo !== false;
-}
-function podeEscrever(tabela){
-  if(!perfilAtivo()) return false;
-  if(TABELAS_SO_ADMIN.includes(tabela)) return currentProfile.role === "admin";
-  return ["admin","editor"].includes(currentProfile.role);
-}
-function podeExcluir(tabela){
-  if(!perfilAtivo()) return false;
-  if(TABELAS_SO_ADMIN.includes(tabela)) return currentProfile.role === "admin";
-  return currentProfile.role === "admin";
-}
-
-// Resposta falsa, com o mesmo formato do supabase-js, para abortar a operação
-// sem quebrar os `const { data, error } = await ...` espalhados pelo código.
-function respostaBloqueada(mensagem){
-  const resultado = { data:null, error:{ message: mensagem, code:"42501" }, count:null, status:403, statusText:"Forbidden" };
-  const fake = {
-    then:(ok, falha)=>Promise.resolve(resultado).then(ok, falha),
-    catch:()=>fake,
-    finally:(fn)=>Promise.resolve(resultado).finally(fn)
-  };
-  ["select","eq","neq","gt","gte","lt","lte","like","ilike","is","in","contains","overlaps",
-   "filter","not","or","match","order","limit","range","single","maybeSingle","csv","returns",
-   "abortSignal","throwOnError"].forEach(m => fake[m] = () => fake);
-  return fake;
-}
-
-// Intercepta toda escrita que passe pelo cliente — cobre qualquer tela,
-// inclusive as que forem criadas depois.
-(function blindarCliente(){
-  const fromOriginal = sb.from.bind(sb);
-  sb.from = (tabela) => {
-    const query = fromOriginal(tabela);
-    const regras = { insert: podeEscrever, update: podeEscrever, upsert: podeEscrever, delete: podeExcluir };
-    for(const [operacao, permitido] of Object.entries(regras)){
-      const original = query[operacao].bind(query);
-      query[operacao] = (...args) => {
-        if(!permitido(tabela)){
-          const acao = operacao === "delete" ? "excluir" : "alterar";
-          return respostaBloqueada(
-            `Seu perfil (${usuariosRoleLabel(currentProfile?.role) || "sem acesso"}) não permite ${acao} registros nesta tela.`
-          );
-        }
-        return original(...args);
-      };
-    }
-    return query;
-  };
-})();
 
 function showLoginOverlay(){
   document.getElementById("login-overlay").classList.remove("hidden");
@@ -1236,10 +1140,6 @@ function applyRoleToUI(){
   document.getElementById("tab-parametros").style.display = isAdmin ? "" : "none";
   document.getElementById("user-email-label").textContent = currentUser?.email || "";
   document.getElementById("logout-btn").style.display = "inline-flex";
-
-  // Espelha na interface o que o RLS já impõe no banco
-  document.body.classList.toggle("sem-escrita",  !podeEscrever("licitacoes"));
-  document.body.classList.toggle("sem-exclusao", !podeExcluir("licitacoes"));
 }
 
 async function doLogin(){
@@ -1261,7 +1161,6 @@ async function doLogin(){
 async function doLogout(){
   await sb.auth.signOut();
   currentUser = null; currentProfile = null;
-  document.body.classList.remove("sem-escrita", "sem-exclusao");
   document.getElementById("login-email").value = "";
   document.getElementById("login-password").value = "";
   showLoginOverlay();
@@ -1339,7 +1238,7 @@ function usuariosResetForm(){
   document.getElementById("novo-usuario-email").value = "";
   document.getElementById("novo-usuario-email").disabled = false;
   document.getElementById("novo-usuario-senha").value = "";
-  document.getElementById("novo-usuario-senha").placeholder = "Mínimo 10 caracteres, com maiúscula, número e símbolo";
+  document.getElementById("novo-usuario-senha").placeholder = "Mínimo 6 caracteres";
   document.querySelectorAll("#novo-usuario-perfil button").forEach(b=>b.classList.toggle("active", b.dataset.role==="editor"));
   document.getElementById("novo-usuario-submit").textContent = "Criar usuário";
 }
@@ -1410,51 +1309,6 @@ async function usuariosToggleAtivo(id){
   await usuariosLoad(); usuariosRenderModal();
 }
 
-/* ---- Validação de senha (substitui o Leaked Password Protection, que é plano Pro) ----
-   Consulta a base do HaveIBeenPwned com k-anonymity: só os 5 primeiros caracteres do
-   SHA-1 saem do navegador. A senha em si nunca trafega. Gratuito, sem chave de API. */
-const SENHA_MIN = 10;
-
-async function sha1Hex(texto){
-  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(texto));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("").toUpperCase();
-}
-
-// Nº de vazamentos em que a senha aparece (0 = limpa). null = API indisponível (falha aberta).
-async function contarVazamentos(senha){
-  try{
-    const hash = await sha1Hex(senha);
-    const resp = await fetch(`https://api.pwnedpasswords.com/range/${hash.slice(0,5)}`, {
-      headers: { "Add-Padding": "true" }
-    });
-    if(!resp.ok) return null;
-    const sufixo = hash.slice(5);
-    for(const linha of (await resp.text()).split("\n")){
-      const [suf, cont] = linha.trim().split(":");
-      if(suf === sufixo) return parseInt(cont, 10);
-    }
-    return 0;
-  }catch(e){
-    console.warn("[senha] HIBP indisponível:", e);
-    return null;
-  }
-}
-
-// Retorna null se a senha for aceitável, ou a mensagem de erro.
-async function validarSenha(senha){
-  if(!senha || senha.length < SENHA_MIN)
-    return `A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`;
-  if(!/[a-z]/.test(senha) || !/[A-Z]/.test(senha) || !/[0-9]/.test(senha) || !/[^A-Za-z0-9]/.test(senha))
-    return "A senha precisa combinar letras minúsculas, maiúsculas, números e ao menos um símbolo.";
-
-  const vazamentos = await contarVazamentos(senha);
-  if(vazamentos === null) return null;
-  if(vazamentos > 0)
-    return `Essa senha aparece em ${vazamentos.toLocaleString("pt-BR")} vazamentos públicos de dados. `
-         + `Escolha outra — senhas vazadas são as primeiras testadas em ataques.`;
-  return null;
-}
-
 // Cliente auxiliar, usado só para criar novos logins sem afetar a sessão do admin atual
 const sbAux = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -1478,8 +1332,7 @@ document.getElementById("novo-usuario-submit").addEventListener("click", async (
       const { error } = await sb.from("profiles").update({ nome, role }).eq("id", usuariosEditingId);
       if(error){ showAppAlert("Erro ao salvar: " + error.message); return; }
       if(senha){
-        const erroSenha = await validarSenha(senha);
-        if(erroSenha){ showAppAlert(erroSenha); return; }
+        if(senha.length < 6){ showAppAlert("A senha precisa ter pelo menos 6 caracteres."); return; }
         // Trocar a senha de OUTRO usuário exige a Admin API (service role) no backend --
         // não é possível fazer isso só com a anon key do navegador. Avisamos o admin.
         showAppAlert("Nome e perfil atualizados. A troca de senha de outro usuário precisa ser feita pelo painel do Supabase (Authentication > Users), pois exige permissão de administrador do banco que o app não tem por segurança.");
@@ -1488,9 +1341,7 @@ document.getElementById("novo-usuario-submit").addEventListener("click", async (
       }
       if(usuariosEditingId === currentUser?.id){ currentProfile.nome = nome; currentProfile.role = role; applyRoleToUI(); }
     } else {
-      if(!senha){ showAppAlert("Defina uma senha para o novo usuário."); return; }
-      const erroSenhaNovo = await validarSenha(senha);
-      if(erroSenhaNovo){ showAppAlert(erroSenhaNovo); return; }
+      if(!senha || senha.length < 6){ showAppAlert("Defina uma senha com pelo menos 6 caracteres."); return; }
       const { data, error } = await sbAux.auth.signUp({ email, password: senha });
       if(error){ showAppAlert("Erro ao criar usuário: " + error.message); return; }
       const newUser = data?.user;
@@ -2570,12 +2421,39 @@ function licParseNum(v){
   const n = parseFloat(v.toString().replace(/[R$\s]/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",","."));
   return isNaN(n) ? 0 : n;
 }
+// Fallback usado somente se a tabela parametros_financeiros não estiver carregada.
+// Espelha o fallback do trigger calc_licitacao_fields() no Postgres.
+const LIC_PARAM_FALLBACK = {imposto_pct:0.07, caixa_adm_pct:0.005, cra_pct:0.325, cbva_pct:0.175, rlv_pct:0.40, lbv_pct:0.10};
+
+// Replica a lógica de parametro_vigente(data_ref) do banco: a data de referência
+// prioriza a data de pagamento (quando o lucro é efetivamente apurado), caindo
+// para entrega/NF e, em último caso, hoje. Isso mantém o cálculo exibido no
+// formulário idêntico ao que o trigger grava (e ao que o grid mostra).
+function licParamVigente(values){
+  const dataRef = values["Data de Pagamento"] || values["Data da Entrega"] || values["Data NF"]
+                  || new Date().toISOString().slice(0,10);
+  const lista = (typeof parametrosData !== "undefined" && Array.isArray(parametrosData)) ? parametrosData : [];
+  const vigentes = lista
+    .filter(p => p && p.vigencia_inicio && String(p.vigencia_inicio).slice(0,10) <= String(dataRef).slice(0,10))
+    .sort((a,b) => String(b.vigencia_inicio).localeCompare(String(a.vigencia_inicio)));
+  const p = vigentes[0];
+  if(!p) return Object.assign({}, LIC_PARAM_FALLBACK);
+  return {
+    imposto_pct:   Number(p.imposto_pct),
+    caixa_adm_pct: Number(p.caixa_adm_pct),
+    cra_pct:       Number(p.cra_pct),
+    cbva_pct:      Number(p.cbva_pct),
+    rlv_pct:       Number(p.rlv_pct),
+    lbv_pct:       Number(p.lbv_pct)
+  };
+}
 function licCompute(values){
+  const par = licParamVigente(values);
   const totalReceber = licParseNum(values["Valor a Receber - TOTAL"]);
   const valorCompra = licParseNum(values["Valor Compra"]);
   const frete = licParseNum(values["FRETE"]);
-  const imposto = totalReceber * 0.07;
-  const caixaAdmAuto = totalReceber * 0.005; // sugestão automática (0,5% do valor a receber)
+  const imposto = totalReceber * par.imposto_pct;
+  const caixaAdmAuto = totalReceber * par.caixa_adm_pct; // sugestão automática conforme vigência
   const caixaAdmRaw = values["CAIXA ADM"];
   const caixaAdmPreenchido = caixaAdmRaw !== undefined && caixaAdmRaw !== null && caixaAdmRaw.toString().trim() !== "";
   // Se o campo estiver preenchido (seja o valor sugerido ou editado), mantém a lógica
@@ -2587,10 +2465,12 @@ function licCompute(values){
   // OBS: NÃO é lucro/valorCompra — essa era a causa do valor exibido divergir do calculado manualmente.
   const custoTotal = valorCompra + imposto + frete + caixaAdmUsado;
   const pct = custoTotal !== 0 ? (lucro/custoTotal) : 0;
-  const cra = lucro * 0.225;
-  const cbva = lucro * 0.225;
-  const rlv = lucro * 0.45;
-  const lbv = lucro * 0.10;
+  // arredonda em 2 casas como o round(...,2) do trigger, evitando divergência de centavos
+  const r2 = (n)=> Math.round((n + Number.EPSILON) * 100) / 100;
+  const cra  = r2(lucro * par.cra_pct);
+  const cbva = r2(lucro * par.cbva_pct);
+  const rlv  = r2(lucro * par.rlv_pct);
+  const lbv  = r2(lucro * par.lbv_pct);
   let dataPrev = "";
   if(values["Data da Entrega"]){
     const d = new Date(values["Data da Entrega"]+"T00:00:00");
@@ -4531,7 +4411,7 @@ async function initApp(){
   try{
     // 1) cadastros base primeiro (licitações/pedidos/planejamento/contas dependem
     //    deles para resolver cliente_id / fornecedor_id / produto_id)
-    await Promise.all([clientesLoad(), fornecedoresLoad(), produtosLoad()]);
+    await Promise.all([clientesLoad(), fornecedoresLoad(), produtosLoad(), parametrosLoad()]);
     clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
     fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
     produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
