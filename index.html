@@ -4053,6 +4053,13 @@ function pcEsc(s){
   return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 const PC_ENDERECO_PADRAO = "Rua Claudia, 659 - Vila Marieta - CEP: 03617-000";
+const PC_EMPRESA = {
+  razaoSocial: "Roberto Lemos Vaz e Serviços",
+  nomeFantasia: "Elétrica Mirra",
+  cnpj: "54.027.667/0001-07",
+  ie: "135.361.400.115",
+  endereco: "Rua Dr. Arnaldo de Morais, 38 - Cangaíba - CEP: 03721-000",
+};
 function pcLogoSrc(){
   const img = document.querySelector("header img");
   return img && img.src ? img.src : "";
@@ -4081,8 +4088,13 @@ function pcBuildDoc(grupos, dataPedido, observacoes){
         <div class="brand">
           ${logo ? `<img class="logo" src="${logo}" alt="Elétrica Mirra">` : `<div class="logo-fallback">EM</div>`}
           <div class="brand-txt">
-            <strong>Elétrica Mirra</strong>
+            <strong>${pcEsc(PC_EMPRESA.nomeFantasia)}</strong>
             <span>Materiais Elétricos e Suprimentos</span>
+            <div class="brand-dados">
+              <div>${pcEsc(PC_EMPRESA.razaoSocial)}</div>
+              <div>CNPJ: ${pcEsc(PC_EMPRESA.cnpj)} &nbsp;·&nbsp; IE: ${pcEsc(PC_EMPRESA.ie)}</div>
+              <div>${pcEsc(PC_EMPRESA.endereco)}</div>
+            </div>
           </div>
         </div>
         <div class="doc-id">
@@ -4128,7 +4140,7 @@ function pcBuildDoc(grupos, dataPedido, observacoes){
       </div>
 
       <footer class="rodape">
-        <span>Elétrica Mirra — Pedido de Compra</span>
+        <span>${pcEsc(PC_EMPRESA.razaoSocial)} — CNPJ ${pcEsc(PC_EMPRESA.cnpj)}</span>
         <span>Emitido em ${pcEsc(dataFmt)} · página ${i+1} de ${grupos.length}</span>
       </footer>
     </article>`;
@@ -4147,6 +4159,7 @@ function pcBuildDoc(grupos, dataPedido, observacoes){
   .logo-fallback{height:52px;width:52px;border-radius:8px;background:#0d2438;color:#f5a623;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;}
   .brand-txt strong{display:block;font-size:15px;letter-spacing:.02em;}
   .brand-txt span{display:block;font-size:10.5px;color:#6b7c8c;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;}
+  .brand-dados{margin-top:5px;font-size:10px;line-height:1.45;color:#5c6c7a;}
   .doc-id{text-align:right;}
   .doc-id h1{margin:0 0 8px;font-size:19px;letter-spacing:.04em;text-transform:uppercase;color:#0d2438;}
   .doc-id-line{font-size:12px;color:#6b7c8c;}
