@@ -1399,8 +1399,8 @@ function parametrosRender(){
     btn.addEventListener("click", async ()=>{
       const p = parametrosData[Number(btn.dataset.del)];
       if(!(await showAppConfirm(`Excluir a vigência de ${fmtDateBR(p.vigencia_inicio)}? Licitações com data anterior a esta passarão a usar a vigência anterior disponível.`))) return;
-      const { error } = await sb.from("parametros_financeiros").delete().eq("id", p.id);
-      if(error){ showAppAlert("Erro ao excluir: " + error.message); return; }
+      const res = await deleteRowById("parametros_financeiros", p.id);
+      if(!res.ok){ showAppAlert(res.msg); return; }
       await parametrosLoad(); parametrosRender();
     });
   });
@@ -1530,11 +1530,17 @@ function wireBulkDelete(prefix, tableName, getFilteredRows, reloadAndRender){
   document.getElementById(prefix+"-bulk-delete").addEventListener("click", async ()=>{
     if(selected.size===0) return;
     if(!(await showAppConfirm(`Excluir ${selected.size} registro(s) selecionado(s)? Esta ação não pode ser desfeita.`))) return;
+    let bloqueados = 0;
     for(const id of [...selected]){
-      const { error } = await sb.from(tableName).delete().eq("id", id);
-      if(error){ console.error(error); showAppAlert("Erro ao excluir: "+error.message); continue; }
+      const res = await deleteRowById(tableName, id);
+      if(!res.ok){
+        if(res.denied) bloqueados++;
+        else { console.error(res.error); showAppAlert(res.msg); }
+        continue;
+      }
       selected.delete(id);
     }
+    if(bloqueados > 0) showAppAlert(`${bloqueados} registro(s) não foram excluídos: seu perfil de acesso não permite excluir registros nesta tela.`);
     await reloadAndRender();
   });
   return {
@@ -1587,8 +1593,8 @@ function clientesRender(searchTerm){
       delBtn.innerHTML = iconTrash + "Excluir";
       delBtn.addEventListener("click", async ()=>{
         if(await showAppConfirm("Excluir este cliente?")){
-          const { error } = await sb.from("clientes").delete().eq("id", c.id);
-          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+          const res = await deleteRowById("clientes", c.id);
+          if(!res.ok){ showAppAlert(res.msg); return; }
           await clientesLoad(); clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
         }
       });
@@ -1679,8 +1685,8 @@ function fornecedoresRender(searchTerm){
       delBtn.innerHTML = iconTrash + "Excluir";
       delBtn.addEventListener("click", async ()=>{
         if(await showAppConfirm("Excluir este fornecedor?")){
-          const { error } = await sb.from("fornecedores").delete().eq("id", f.id);
-          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+          const res = await deleteRowById("fornecedores", f.id);
+          if(!res.ok){ showAppAlert(res.msg); return; }
           await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
         }
       });
@@ -1772,8 +1778,8 @@ function produtosRender(searchTerm){
       delBtn.innerHTML = iconTrash + "Excluir";
       delBtn.addEventListener("click", async ()=>{
         if(await showAppConfirm("Excluir este produto?")){
-          const { error } = await sb.from("produtos").delete().eq("id", p.id);
-          if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+          const res = await deleteRowById("produtos", p.id);
+          if(!res.ok){ showAppAlert(res.msg); return; }
           await produtosLoad(); produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
         }
       });
@@ -1871,6 +1877,17 @@ const appConfirmMessage = document.getElementById("app-confirm-message");
 const appConfirmOkBtn = document.getElementById("app-confirm-ok-btn");
 const appConfirmCancelBtn = document.getElementById("app-confirm-cancel-btn");
 let appConfirmResolve = null;
+/* Exclui um registro por id e distingue os três desfechos possíveis:
+   sucesso, erro do banco e "0 linhas removidas" (bloqueio de permissão via RLS,
+   que o Supabase devolve sem erro e antes passava despercebido na tela). */
+async function deleteRowById(tableName, id){
+  const { data, error } = await sb.from(tableName).delete().eq("id", id).select("id");
+  if(error) return { ok:false, denied:false, msg:"Erro ao excluir: "+error.message, error };
+  if(!data || data.length === 0){
+    return { ok:false, denied:true, msg:"Nada foi excluído: seu perfil de acesso não permite excluir registros nesta tela." };
+  }
+  return { ok:true, denied:false };
+}
 function showAppConfirm(message, opts){
   opts = opts || {};
   appConfirmTitle.textContent = opts.title || "Confirmar ação";
@@ -2380,8 +2397,8 @@ function licRender(){
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
       if(await showAppConfirm("Excluir esta linha?")){
-        const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
-        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        const res = await deleteRowById("licitacoes", r.id);
+        if(!res.ok){ showAppAlert(res.msg); return; }
         licSelectedIds.delete(r.id);
         await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
       }
@@ -2633,11 +2650,17 @@ document.getElementById("lic-bulk-delete").addEventListener("click", async ()=>{
   if(licSelectedIds.size === 0) return;
   const selecionados = licData.filter(r=>licSelectedIds.has(r.id));
   if(!(await showAppConfirm(`Excluir ${selecionados.length} registro(s) de licitação selecionado(s)? Esta ação não pode ser desfeita.`))) return;
+  let bloqueados = 0;
   for(const r of selecionados){
-    const { error } = await sb.from("licitacoes").delete().eq("id", r.id);
-    if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
+    const res = await deleteRowById("licitacoes", r.id);
+    if(!res.ok){
+      if(res.denied) bloqueados++;
+      else { console.error(res.error); showAppAlert("Erro ao excluir item: "+res.msg); }
+      continue;
+    }
     licSelectedIds.delete(r.id);
   }
+  if(bloqueados > 0) showAppAlert(`${bloqueados} registro(s) não foram excluídos: seu perfil de acesso não permite excluir licitações.`);
   await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
 });
 
@@ -3248,8 +3271,8 @@ function pedidosRender(searchTerm){
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
       if(await showAppConfirm("Excluir este pedido?")){
-        const { error } = await sb.from("pedidos").delete().eq("id", p.id);
-        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        const res = await deleteRowById("pedidos", p.id);
+        if(!res.ok){ showAppAlert(res.msg); return; }
         pedidosSelectedIds.delete(p.id);
         await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
       }
@@ -3723,11 +3746,17 @@ document.getElementById("ped-bulk-delete").addEventListener("click", async ()=>{
   if(pedidosSelectedIds.size === 0) return;
   const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
   if(!(await showAppConfirm(`Excluir ${selecionados.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`))) return;
+  let bloqueados = 0;
   for(const p of selecionados){
-    const { error } = await sb.from("pedidos").delete().eq("id", p.id);
-    if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
+    const res = await deleteRowById("pedidos", p.id);
+    if(!res.ok){
+      if(res.denied) bloqueados++;
+      else { console.error(res.error); showAppAlert("Erro ao excluir item: "+res.msg); }
+      continue;
+    }
     pedidosSelectedIds.delete(p.id);
   }
+  if(bloqueados > 0) showAppAlert(`${bloqueados} pedido(s) não foram excluídos: seu perfil de acesso não permite excluir pedidos.`);
   await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
 });
 
@@ -3848,8 +3877,8 @@ function planRender(searchTerm){
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
       if(await showAppConfirm("Excluir este item de planejamento?")){
-        const { error } = await sb.from("planejamento").delete().eq("id", p.id);
-        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        const res = await deleteRowById("planejamento", p.id);
+        if(!res.ok){ showAppAlert(res.msg); return; }
         planSelectedIds.delete(p.id);
         await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
       }
@@ -3925,8 +3954,11 @@ function planOpenForm(existingIndex){
         const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
         if(insErr){ showAppAlert("Erro ao devolver para Pedidos: "+insErr.message); return false; }
         if(existing){
-          const { error: delErr } = await sb.from("planejamento").delete().eq("id", existing.id);
-          if(delErr) console.error(delErr);
+          const delRes = await deleteRowById("planejamento", existing.id);
+          if(!delRes.ok){
+            console.error(delRes.error || delRes.msg);
+            showAppAlert("O item foi enviado para Pedidos, mas não pôde ser removido do Planejamento: "+delRes.msg);
+          }
           planSelectedIds.delete(existing.id);
         }
         await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
@@ -4040,8 +4072,11 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
     };
     const { error: insErr } = await sb.from("pedidos").insert(pedidoPayload);
     if(insErr){ console.error(insErr); showAppAlert("Erro ao devolver item para Pedidos: "+insErr.message); continue; }
-    const { error: delErr } = await sb.from("planejamento").delete().eq("id", p.id);
-    if(delErr) console.error(delErr);
+    const delRes = await deleteRowById("planejamento", p.id);
+    if(!delRes.ok){
+      console.error(delRes.error || delRes.msg);
+      showAppAlert("O item foi enviado para Pedidos, mas não pôde ser removido do Planejamento: "+delRes.msg);
+    }
     planSelectedIds.delete(p.id);
   }
   document.getElementById("plan-bulk-status").value = "";
@@ -4257,10 +4292,18 @@ document.getElementById("plan-bulk-delete").addEventListener("click", async ()=>
   if(planSelectedIds.size === 0) return;
   const selecionados = planData.filter(p=>planSelectedIds.has(p.id));
   if(!(await showAppConfirm(`Excluir ${selecionados.length} item(ns) de planejamento selecionado(s)?`))) return;
+  let bloqueados = 0;
   for(const p of selecionados){
-    const { error } = await sb.from("planejamento").delete().eq("id", p.id);
-    if(error){ console.error(error); showAppAlert("Erro ao excluir item: "+error.message); continue; }
+    const res = await deleteRowById("planejamento", p.id);
+    if(!res.ok){
+      if(res.denied) bloqueados++;
+      else { console.error(res.error); showAppAlert("Erro ao excluir item: "+res.msg); }
+      continue;
+    }
     planSelectedIds.delete(p.id);
+  }
+  if(bloqueados > 0){
+    showAppAlert(`${bloqueados} item(ns) não foram excluídos: seu perfil de acesso não permite excluir itens de planejamento.`);
   }
   await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
 });
@@ -4345,8 +4388,8 @@ function contasRender(searchTerm){
     delBtn.addEventListener("click", async (e)=>{
       e.stopPropagation();
       if(await showAppConfirm("Excluir este registro?")){
-        const { error } = await sb.from("contas_pagar").delete().eq("id", c.id);
-        if(error){ showAppAlert("Erro ao excluir: "+error.message); return; }
+        const res = await deleteRowById("contas_pagar", c.id);
+        if(!res.ok){ showAppAlert(res.msg); return; }
         await contasLoad(); contasRender(""); renderContasKpis(); checkContasAlerts();
       }
     });
