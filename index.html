@@ -4063,16 +4063,17 @@ function pcBuildDoc(grupos, dataPedido, observacoes){
   const seq = (()=>{ const n = new Date(); return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}`; })();
   const blocos = grupos.map((g, i)=>{
     const qtdTotal = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0), 0);
-    const total = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0) * (parseFloat(it.precoCompra)||0), 0);
+    const total = g.itens.reduce((s,it)=> s + (it.total != null ? it.total : (parseFloat(it.quantidade)||0) * (parseFloat(it.precoCompra)||0)), 0);
     const linhas = g.itens.map((it, n)=>{
       const q = parseFloat(it.quantidade)||0;
       const pc = parseFloat(it.precoCompra)||0;
+      const tot = it.total != null ? it.total : q*pc;
       return `<tr>
         <td class="idx">${String(n+1).padStart(2,"0")}</td>
         <td>${pcEsc(it.produto || "-")}</td>
         <td class="num">${fmtNum2(q)}</td>
         <td class="num">${fmtCurrency(pc)}</td>
-        <td class="num strong">${fmtCurrency(q*pc)}</td>
+        <td class="num strong">${fmtCurrency(tot)}</td>
       </tr>`;
     }).join("");
     return `<article class="doc" ${i>0 ? 'style="page-break-before:always;"' : ""}>
@@ -4194,14 +4195,30 @@ document.getElementById("plan-bulk-pedido-compra").addEventListener("click", ()=
   const mapa = new Map();
   for(const p of selecionados){
     const key = (p.fornecedor || "").trim() || "(Sem fornecedor)";
-    if(!mapa.has(key)){ const g = {fornecedor:key, itens:[]}; mapa.set(key, g); grupos.push(g); }
-    mapa.get(key).itens.push(p);
+    if(!mapa.has(key)){ const g = {fornecedor:key, itens:[], porProduto:new Map()}; mapa.set(key, g); grupos.push(g); }
+    const g = mapa.get(key);
+    // mesmo fornecedor + mesmo produto (mesmo que de clientes diferentes) => unifica somando qtd e valor total
+    const produto = (p.produto || "-").trim();
+    const pKey = produto.toLowerCase();
+    const q = parseFloat(p.quantidade)||0;
+    const v = q * (parseFloat(p.precoCompra)||0);
+    const ex = g.porProduto.get(pKey);
+    if(ex){
+      ex.quantidade += q;
+      ex.total += v;
+      ex.precoCompra = ex.quantidade ? ex.total/ex.quantidade : 0;
+    }else{
+      const it = {produto, quantidade:q, precoCompra:parseFloat(p.precoCompra)||0, total:v};
+      g.porProduto.set(pKey, it);
+      g.itens.push(it);
+    }
   }
+  for(const g of grupos) delete g.porProduto;
   grupos.sort((a,b)=>a.fornecedor.localeCompare(b.fornecedor,"pt-BR"));
   const hoje = new Date();
   const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
   const resumo = grupos.map(g=>{
-    const total = g.itens.reduce((s,it)=> s + (parseFloat(it.quantidade)||0)*(parseFloat(it.precoCompra)||0), 0);
+    const total = g.itens.reduce((s,it)=> s + (it.total||0), 0);
     return `${g.fornecedor}: ${g.itens.length} item(ns) — ${fmtCurrency(total)}`;
   }).join("\n");
   openModal({
