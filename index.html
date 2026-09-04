@@ -3353,6 +3353,8 @@ function pedidosCompute(values){
 }
 
 const PEDIDOS_STATUS_SUBTAB = { "À enviar":"recebidos", "Comprado":"comprado", "Enviado":"enviados", "Selecionado pra compra":"comprado" };
+// Status que entram nos KPIs financeiros de pedidos: só o que ainda está por comprar.
+const PEDIDOS_STATUS_COMPRA = ["À enviar", "Selecionado pra compra"];
 
 /* ---- Escopos da tabela de pedidos ----
    A mesma tabela de `pedidos` alimenta duas abas: "Pedidos" (fornecedores
@@ -3687,9 +3689,12 @@ function pedidosRenderKpis(){
 function pedidosRenderKpisEscopo(pfx, estoque){
   const escopo = pedidosDoEscopo(estoque);
   const rotulo = estoque ? "Pedidos em Estoque" : "Pedidos";
-  const totalCompra = escopo.reduce((a,p)=>a+(parseFloat(p.valorTotalCompra)||0),0);
-  const totalVenda = escopo.reduce((a,p)=>a+(parseFloat(p.valorTotalVenda)||0),0);
-  const totalLucro = escopo.reduce((a,p)=>a+(parseFloat(p.lucroBruto)||0),0);
+  // Os totais financeiros consideram apenas os pedidos ainda em aberto (à enviar /
+  // selecionados pra compra) — comprados e enviados já não representam compra a realizar.
+  const emAberto = escopo.filter(p => PEDIDOS_STATUS_COMPRA.includes(p.status));
+  const totalCompra = emAberto.reduce((a,p)=>a+(parseFloat(p.valorTotalCompra)||0),0);
+  const totalVenda = emAberto.reduce((a,p)=>a+(parseFloat(p.valorTotalVenda)||0),0);
+  const totalLucro = emAberto.reduce((a,p)=>a+(parseFloat(p.lucroBruto)||0),0);
   pedEl(pfx, "kpis").innerHTML = `
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></div><div><div class="label">${rotulo}</div><div class="value">${escopo.length}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/></svg></div><div><div class="label">Valor Total Compra</div><div class="value">${fmtCurrency(totalCompra)}</div></div></div>
