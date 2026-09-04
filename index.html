@@ -747,6 +747,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
     Pedidos
   </button>
+  <button class="tab-btn" data-view="estoque">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-9-5-9 5 9 5 9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 16l9 5 9-5"/></svg>
+    Estoque
+  </button>
   <button class="tab-btn" data-view="mensal">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
     Mensal
@@ -914,6 +918,67 @@
     </div>
   </section>
 
+  <!-- ESTOQUE (mesmos pedidos, mas de fornecedores marcados como "Estoque") -->
+  <section id="view-estoque" class="view">
+    <div class="kpis" id="est-kpis"></div>
+    <div class="subtabs" id="est-subtabs">
+      <button class="subtab-btn active" data-subtab="recebidos">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Pedidos Recebidos <span class="count" id="est-count-recebidos">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="comprado">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Comprado / À Enviar <span class="count" id="est-count-comprado">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="enviados">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        Enviados <span class="count" id="est-count-enviados">0</span>
+      </button>
+      <button class="subtab-btn" data-subtab="historico">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13a9 9 0 1 0 .5-4.5"/><path d="M12 7v5l4 2"/></svg>
+        Histórico <span class="count" id="est-count-historico">0</span>
+      </button>
+    </div>
+    <div class="toolbar">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="est-search" placeholder="Buscar pedido, licitante, fornecedor, material...">
+      </div>
+      <select id="est-fornecedor-filter"><option value="">Todos os fornecedores</option></select>
+      <select id="est-status-filter"><option value="">Todos os status</option></select>
+    </div>
+    <div class="toolbar" id="est-bulk-bar" style="display:none;background:var(--line);border-radius:8px;">
+      <span id="est-bulk-count" style="font-weight:700;font-size:12.5px;"></span>
+      <select id="est-bulk-status">
+        <option value="">Alterar status para...</option>
+        <option value="À enviar">À enviar</option>
+        <option value="Comprado">Comprado</option>
+        <option value="Enviado">Enviado</option>
+        <option value="Selecionado pra compra">Selecionado pra compra</option>
+      </select>
+      <button class="btn secondary" id="est-bulk-apply-status">Aplicar status</button>
+      <input type="date" id="est-bulk-data-compra" style="max-width:170px;" title="Definir Data da Compra em lote">
+      <button class="btn secondary" id="est-bulk-apply-data-compra">Aplicar data compra</button>
+      <input type="date" id="est-bulk-data-envio" style="max-width:170px;" title="Definir Data de Envio em lote">
+      <button class="btn secondary" id="est-bulk-apply-data-envio">Aplicar data envio</button>
+      <button class="btn secondary" id="est-bulk-delete">Excluir selecionados</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="est-select-all"></th>
+          <th>Nº Pedido</th><th>Licitante</th><th>Fornecedor</th><th>Nº Empenho</th><th>Material</th>
+          <th>Qtd</th><th>Preço Compra</th><th>Preço Venda</th>
+          <th>Data Pedido Email</th><th>Data da Compra</th><th>Data Envio</th><th>Prazo Máx. Envio</th>
+          <th>Valor Total Compra</th><th>Valor Total Venda</th>
+          <th>Lucro Bruto</th><th>% Lucro Bruto</th>
+          <th>Comprado</th><th>Status</th><th>Observação</th><th>Ações</th>
+        </tr></thead>
+        <tbody id="est-body"></tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- MENSAL -->
   <section id="view-mensal" class="view">
     <div class="toolbar">
@@ -1051,7 +1116,7 @@
       <table>
         <thead><tr>
           <th style="width:32px;"><input type="checkbox" id="fornecedores-select-all"></th>
-          <th>Nome do Fornecedor</th><th>Ações</th>
+          <th>Nome do Fornecedor</th><th>Estoque</th><th>Ações</th>
         </tr></thead>
         <tbody id="fornecedores-body"></tbody>
       </table>
@@ -1700,7 +1765,7 @@ async function updateCadastroById(tableName, id, payload, cascatas){
 // Recarrega as telas que exibem o nome copiado, para a mudança aparecer sem dar F5
 async function reloadTelasDependentes(){
   await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
-  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(document.getElementById("ped-search").value); pedidosRenderKpis();
+  await pedidosLoad(); pedidosRefresh();
   await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
   await contasLoad(); contasRender(document.getElementById("contas-search").value); renderContasKpis(); checkContasAlerts();
 }
@@ -1858,7 +1923,7 @@ function fornecedoresRender(searchTerm){
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 3;
+    td.colSpan = 4;
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg><div>Nenhum fornecedor cadastrado ainda.</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
   } else {
@@ -1874,6 +1939,8 @@ function fornecedoresRender(searchTerm){
       });
       tdChk.appendChild(chk);
       const tdNome = document.createElement("td"); tdNome.textContent = f.nome;
+      const tdEstoque = document.createElement("td");
+      tdEstoque.innerHTML = `<span class="badge-comprado ${f.estoque?'sim':'nao'}">${f.estoque ? 'Sim' : 'Não'}</span>`;
       const tdAcao = document.createElement("td");
       const editBtn = makeEditBtn(()=>editFornecedorQuick(f));
       const delBtn = makeDelBtn(async ()=>{
@@ -1884,7 +1951,7 @@ function fornecedoresRender(searchTerm){
         }
       });
       tdAcao.append(editBtn, delBtn);
-      tr.append(tdChk, tdNome, tdAcao);
+      tr.append(tdChk, tdNome, tdEstoque, tdAcao);
       tbody.appendChild(tr);
     });
   }
@@ -1911,10 +1978,12 @@ function addFornecedorQuick(prefillName, onCreated){
     icon: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>`,
     fields: [
       {key:"nome", label:"Nome do Fornecedor", type:"text", full:true, value:prefillName||""},
+      {key:"estoque", label:"Estoque", type:"checkbox", full:true, value:false,
+       hint:"Marcando esta opção, os pedidos deste fornecedor aparecem na aba Estoque em vez da aba Pedidos."},
     ],
     onSave: async (values)=>{
       if(!values.nome.trim()){ showAppAlert("Informe o nome do fornecedor."); return false; }
-      const { error } = await sb.from("fornecedores").insert({nome:values.nome.trim()});
+      const { error } = await sb.from("fornecedores").insert({nome:values.nome.trim(), estoque:!!values.estoque});
       if(error){ showAppAlert("Erro ao salvar fornecedor: "+error.message); return false; }
       await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
       if(onCreated) onCreated(values.nome.trim());
@@ -1928,11 +1997,13 @@ function editFornecedorQuick(fornecedor){
     icon: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>`,
     fields: [
       {key:"nome", label:"Nome do Fornecedor", type:"text", full:true, value:fornecedor.nome || ""},
+      {key:"estoque", label:"Estoque", type:"checkbox", full:true, value:!!fornecedor.estoque,
+       hint:"Marcando esta opção, os pedidos deste fornecedor aparecem na aba Estoque em vez da aba Pedidos."},
     ],
     onSave: async (values)=>{
       const nome = values.nome.trim();
       if(!nome){ showAppAlert("Informe o nome do fornecedor."); return false; }
-      const res = await updateCadastroById("fornecedores", fornecedor.id, {nome}, [
+      const res = await updateCadastroById("fornecedores", fornecedor.id, {nome, estoque:!!values.estoque}, [
         {table:"pedidos", fk:"fornecedor_id", col:"fornecedor_nome"},
         {table:"planejamento", fk:"fornecedor_id", col:"fornecedor_nome"},
         {table:"contas_pagar", fk:"fornecedor_id", col:"fornecedor_nome"},
@@ -2337,16 +2408,31 @@ function openQuickModal({title, icon, fields, onSave}){
     label.setAttribute("for", "quickadd-modal-field-"+f.key);
     wrap.appendChild(label);
     const input = f.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
-    if(f.type !== "textarea") input.type = "text";
+    if(f.type === "checkbox"){
+      input.type = "checkbox";
+      input.checked = !!f.value;
+      wrap.classList.add("checkbox-field");
+    } else if(f.type !== "textarea"){
+      input.type = "text";
+    }
     input.id = "quickadd-modal-field-"+f.key;
     input.dataset.key = f.key;
-    if(f.value !== undefined) input.value = f.value;
+    if(f.value !== undefined && f.type !== "checkbox") input.value = f.value;
     wrap.appendChild(input);
+    if(f.hint){
+      const hint = document.createElement("div");
+      hint.style.cssText = "font-size:11.5px;color:var(--muted);margin-top:4px;";
+      hint.textContent = f.hint;
+      wrap.appendChild(hint);
+    }
     quickModalBody.appendChild(wrap);
   });
   quickModalOnSave = async ()=>{
     const values = {};
-    fields.forEach(f=>{ values[f.key] = document.getElementById("quickadd-modal-field-"+f.key).value; });
+    fields.forEach(f=>{
+      const el = document.getElementById("quickadd-modal-field-"+f.key);
+      values[f.key] = f.type === "checkbox" ? el.checked : el.value;
+    });
     const saveBtn = document.getElementById("quickadd-modal-save-btn");
     saveBtn.disabled = true; saveBtn.style.opacity = "0.6";
     try{
@@ -3214,6 +3300,7 @@ function pedidosFromDbRow(r){
     numero: r.numero || "",
     licitante: r.licitante_nome || "",
     fornecedor: r.fornecedor_nome || "",
+    fornecedorId: r.fornecedor_id || null,
     empenho: r.empenho || "",
     material: r.material || "",
     quantidade: r.quantidade,
@@ -3265,16 +3352,73 @@ function pedidosCompute(values){
   return {totalCompra, totalVenda, lucro, pct, prazo};
 }
 
-let pedidosSubTab = "recebidos";
-let pedidosSelectedIds = new Set();
 const PEDIDOS_STATUS_SUBTAB = { "À enviar":"recebidos", "Comprado":"comprado", "Enviado":"enviados", "Selecionado pra compra":"comprado" };
+// Status que entram nos KPIs financeiros de pedidos: só o que ainda está por comprar.
+const PEDIDOS_STATUS_COMPRA = ["À enviar", "Selecionado pra compra"];
 
-function pedidosUpdateBulkBar(){
-  const bar = document.getElementById("ped-bulk-bar");
-  const n = pedidosSelectedIds.size;
+/* ---- Escopos da tabela de pedidos ----
+   A mesma tabela de `pedidos` alimenta duas abas: "Pedidos" (fornecedores
+   normais) e "Estoque" (fornecedores com a opção Estoque marcada no cadastro).
+   Cada escopo tem seus próprios elementos de DOM (prefixo dos ids), sub-aba
+   ativa e seleção em lote — a lógica de render/ações é compartilhada. */
+const PEDIDOS_SCOPES = [
+  { pfx:"ped", estoque:false },
+  { pfx:"est", estoque:true  },
+];
+const pedidosScopeState = {
+  ped: { subTab:"recebidos", selectedIds:new Set() },
+  est: { subTab:"recebidos", selectedIds:new Set() },
+};
+const pedEl = (pfx, suffix) => document.getElementById(pfx+"-"+suffix);
+const pedSearchValue = (pfx) => pedEl(pfx, "search").value;
+
+// Fornecedores marcados como "Estoque" no cadastro (por id e por nome, pois
+// pedidos antigos podem ter só o nome copiado, sem fornecedor_id).
+function fornecedoresEstoqueRefs(){
+  const ids = new Set(), nomes = new Set();
+  (fornecedoresData || []).forEach(f=>{
+    if(!f.estoque) return;
+    ids.add(f.id);
+    nomes.add(pedidoNorm(f.nome));
+  });
+  return { ids, nomes };
+}
+function pedidoEhEstoque(p, refs){
+  const r = refs || fornecedoresEstoqueRefs();
+  return (p.fornecedorId && r.ids.has(p.fornecedorId)) || r.nomes.has(pedidoNorm(p.fornecedor));
+}
+function pedidosDoEscopo(estoque){
+  const refs = fornecedoresEstoqueRefs();
+  return pedidosData.filter(p => pedidoEhEstoque(p, refs) === estoque);
+}
+// Linhas visíveis num escopo, aplicando sub-aba + filtros + busca.
+function pedidosLinhasVisiveis(pfx, estoque, searchTerm){
+  const st = pedidosScopeState[pfx];
+  const fornFilter = pedEl(pfx, "fornecedor-filter").value;
+  const statusFilter = pedEl(pfx, "status-filter").value;
+  let rows = pedidosDoEscopo(estoque).filter(p => pedidosRowSubTab(p) === st.subTab);
+  if(fornFilter) rows = rows.filter(p => p.fornecedor === fornFilter);
+  if(statusFilter) rows = rows.filter(p => p.status === statusFilter);
+  const s = (searchTerm || "").trim().toLowerCase();
+  if(s) rows = rows.filter(p => Object.values(p).join(" ").toLowerCase().includes(s));
+  return rows;
+}
+
+function pedidosUpdateBulkBar(pfx){
+  const bar = pedEl(pfx, "bulk-bar");
+  const n = pedidosScopeState[pfx].selectedIds.size;
   if(n === 0){ bar.style.display = "none"; return; }
   bar.style.display = "flex";
-  document.getElementById("ped-bulk-count").textContent = n + " selecionado(s)";
+  pedEl(pfx, "bulk-count").textContent = n + " selecionado(s)";
+}
+
+// Recarrega filtros, tabelas e KPIs das duas abas de uma vez.
+function pedidosRefresh(){
+  PEDIDOS_SCOPES.forEach(sc=>{
+    pedidosPopulateFilters(sc.pfx, sc.estoque);
+    pedidosRender(pedSearchValue(sc.pfx), sc.pfx);
+  });
+  pedidosRenderKpis();
 }
 
 /* ---- Integração Pedidos → Licitações (consolidação por pedido) ----
@@ -3399,11 +3543,12 @@ function pedidosRowSubTab(p){
   return PEDIDOS_STATUS_SUBTAB[p.status] || "recebidos";
 }
 
-function pedidosPopulateFilters(){
-  const fornSel = document.getElementById("ped-fornecedor-filter");
-  const statusSel = document.getElementById("ped-status-filter");
-  const fornecedores = [...new Set(pedidosData.map(p=>p.fornecedor).filter(Boolean))].sort();
-  const statuses = [...new Set(pedidosData.map(p=>p.status).filter(Boolean))].sort();
+function pedidosPopulateFilters(pfx="ped", estoque=false){
+  const fornSel = pedEl(pfx, "fornecedor-filter");
+  const statusSel = pedEl(pfx, "status-filter");
+  const escopo = pedidosDoEscopo(estoque);
+  const fornecedores = [...new Set(escopo.map(p=>p.fornecedor).filter(Boolean))].sort();
+  const statuses = [...new Set(escopo.map(p=>p.status).filter(Boolean))].sort();
   const currentForn = fornSel.value, currentStatus = statusSel.value;
   fornSel.innerHTML = '<option value="">Todos os fornecedores</option>' + fornecedores.map(f=>`<option value="${f}">${f}</option>`).join("");
   statusSel.innerHTML = '<option value="">Todos os status</option>' + statuses.map(s=>`<option value="${s}">${s}</option>`).join("");
@@ -3411,22 +3556,19 @@ function pedidosPopulateFilters(){
   if(statuses.includes(currentStatus)) statusSel.value = currentStatus;
 }
 
-function pedidosRender(searchTerm){
-  const tbody = document.getElementById("ped-body");
+function pedidosRender(searchTerm, pfx="ped"){
+  const scope = PEDIDOS_SCOPES.find(s=>s.pfx===pfx);
+  const estoque = !!scope?.estoque;
+  const state = pedidosScopeState[pfx];
+  const pedidosSubTab = state.subTab;
+  const selectedIds = state.selectedIds;
+  const tbody = pedEl(pfx, "body");
   tbody.innerHTML = "";
-  const fornFilter = document.getElementById("ped-fornecedor-filter").value;
-  const statusFilter = document.getElementById("ped-status-filter").value;
-  let rows = pedidosData.filter(p => pedidosRowSubTab(p) === pedidosSubTab);
-  if(fornFilter) rows = rows.filter(p => p.fornecedor === fornFilter);
-  if(statusFilter) rows = rows.filter(p => p.status === statusFilter);
-  if(searchTerm){
-    const s = searchTerm.toLowerCase();
-    rows = rows.filter(p => Object.values(p).join(" ").toLowerCase().includes(s));
-  }
-  document.getElementById("ped-count-recebidos").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="recebidos").length;
-  document.getElementById("ped-count-comprado").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="comprado").length;
-  document.getElementById("ped-count-enviados").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="enviados").length;
-  document.getElementById("ped-count-historico").textContent = pedidosData.filter(p=>pedidosRowSubTab(p)==="historico").length;
+  const rows = pedidosLinhasVisiveis(pfx, estoque, searchTerm);
+  const escopo = pedidosDoEscopo(estoque);
+  ["recebidos","comprado","enviados","historico"].forEach(sub=>{
+    pedEl(pfx, "count-"+sub).textContent = escopo.filter(p=>pedidosRowSubTab(p)===sub).length;
+  });
   if(rows.length===0){
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -3437,12 +3579,14 @@ function pedidosRender(searchTerm){
       ? "Nenhum pedido enviado no momento."
       : pedidosSubTab === "historico"
       ? "Nenhum pedido no histórico ainda. Pedidos com status \"Enviado\" e Data de Envio preenchida aparecem aqui automaticamente."
+      : estoque
+      ? "Nenhum pedido de estoque no momento. Marque um fornecedor como \"Estoque\" no cadastro para que os pedidos dele apareçam aqui."
       : "Nenhum pedido recebido no momento. Clique em \"Novo Pedido\" para começar.";
     td.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg><div>${emptyMsg}</div></div>`;
     tr.appendChild(td); tbody.appendChild(tr);
-    const selAllEmpty = document.getElementById("ped-select-all");
+    const selAllEmpty = pedEl(pfx, "select-all");
     if(selAllEmpty) selAllEmpty.checked = false;
-    pedidosUpdateBulkBar();
+    pedidosUpdateBulkBar(pfx);
     return;
   }
   rows.forEach(p=>{
@@ -3459,13 +3603,13 @@ function pedidosRender(searchTerm){
     const tdChk = document.createElement("td");
     const chk = document.createElement("input");
     chk.type = "checkbox";
-    chk.checked = pedidosSelectedIds.has(p.id);
+    chk.checked = selectedIds.has(p.id);
     chk.addEventListener("click", (e)=>{
       e.stopPropagation();
-      if(chk.checked) pedidosSelectedIds.add(p.id); else pedidosSelectedIds.delete(p.id);
-      const selAll = document.getElementById("ped-select-all");
-      if(selAll) selAll.checked = rows.every(x=>pedidosSelectedIds.has(x.id));
-      pedidosUpdateBulkBar();
+      if(chk.checked) selectedIds.add(p.id); else selectedIds.delete(p.id);
+      const selAll = pedEl(pfx, "select-all");
+      if(selAll) selAll.checked = rows.every(x=>selectedIds.has(x.id));
+      pedidosUpdateBulkBar(pfx);
     });
     tdChk.appendChild(chk);
     tr.appendChild(tdChk);
@@ -3509,7 +3653,7 @@ function pedidosRender(searchTerm){
         e.stopPropagation();
         const { error } = await sb.from("pedidos").update({status:"Comprado", comprado:true}).eq("id", p.id);
         if(error){ showAppAlert("Erro ao atualizar: "+error.message); return; }
-        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(document.getElementById("ped-search").value); pedidosRenderKpis();
+        await pedidosLoad(); pedidosRefresh();
       });
       actionTd.appendChild(buyBtn);
     }
@@ -3525,8 +3669,8 @@ function pedidosRender(searchTerm){
       if(await showAppConfirm("Excluir este pedido?")){
         const res = await deleteRowById("pedidos", p.id);
         if(!res.ok){ showAppAlert(res.msg); return; }
-        pedidosSelectedIds.delete(p.id);
-        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+        selectedIds.delete(p.id);
+        await pedidosLoad(); pedidosRefresh();
       }
     });
     actionTd.append(editBtn, delBtn);
@@ -3534,17 +3678,25 @@ function pedidosRender(searchTerm){
     tr.addEventListener("click", ()=>pedidosOpenForm(idx));
     tbody.appendChild(tr);
   });
-  const selAll = document.getElementById("ped-select-all");
-  if(selAll) selAll.checked = rows.length>0 && rows.every(r=>pedidosSelectedIds.has(r.id));
-  pedidosUpdateBulkBar();
+  const selAll = pedEl(pfx, "select-all");
+  if(selAll) selAll.checked = rows.length>0 && rows.every(r=>selectedIds.has(r.id));
+  pedidosUpdateBulkBar(pfx);
 }
 
 function pedidosRenderKpis(){
-  const totalCompra = pedidosData.reduce((a,p)=>a+(parseFloat(p.valorTotalCompra)||0),0);
-  const totalVenda = pedidosData.reduce((a,p)=>a+(parseFloat(p.valorTotalVenda)||0),0);
-  const totalLucro = pedidosData.reduce((a,p)=>a+(parseFloat(p.lucroBruto)||0),0);
-  document.getElementById("ped-kpis").innerHTML = `
-    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></div><div><div class="label">Pedidos</div><div class="value">${pedidosData.length}</div></div></div>
+  PEDIDOS_SCOPES.forEach(sc=>pedidosRenderKpisEscopo(sc.pfx, sc.estoque));
+}
+function pedidosRenderKpisEscopo(pfx, estoque){
+  const escopo = pedidosDoEscopo(estoque);
+  const rotulo = estoque ? "Pedidos em Estoque" : "Pedidos";
+  // Os totais financeiros consideram apenas os pedidos ainda em aberto (à enviar /
+  // selecionados pra compra) — comprados e enviados já não representam compra a realizar.
+  const emAberto = escopo.filter(p => PEDIDOS_STATUS_COMPRA.includes(p.status));
+  const totalCompra = emAberto.reduce((a,p)=>a+(parseFloat(p.valorTotalCompra)||0),0);
+  const totalVenda = emAberto.reduce((a,p)=>a+(parseFloat(p.valorTotalVenda)||0),0);
+  const totalLucro = emAberto.reduce((a,p)=>a+(parseFloat(p.lucroBruto)||0),0);
+  pedEl(pfx, "kpis").innerHTML = `
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></div><div><div class="label">${rotulo}</div><div class="value">${escopo.length}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/></svg></div><div><div class="label">Valor Total Compra</div><div class="value">${fmtCurrency(totalCompra)}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="label">Valor Total Venda</div><div class="value">${fmtCurrency(totalVenda)}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.5 8.5-5-5L2 17"/></svg></div><div><div class="label">Lucro Bruto Total</div><div class="value ${totalLucro<0?'neg':'pos'}">${fmtCurrency(totalLucro)}</div></div></div>
@@ -3792,7 +3944,7 @@ function pedidosOpenMultiForm(){
       const { error } = await sb.from("pedidos").insert(payloads);
       if(error){ showAppAlert("Erro ao salvar no Supabase: "+error.message); return; }
       closeModal();
-      await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+      await pedidosLoad(); pedidosRefresh();
       showAppAlert(`${payloads.length} produto(s) lançado(s) no pedido com sucesso.`, "success");
     } finally {
       saveBtn.disabled = false; saveBtn.style.opacity = "";
@@ -3882,7 +4034,7 @@ function pedidosOpenForm(existingIndex){
           const { error: delErr } = await sb.from("pedidos").delete().eq("id", newId);
           if(delErr) console.error(delErr);
         }
-        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+        await pedidosLoad(); pedidosRefresh();
         await planLoad(); planPopulateFornecedorFilter(); planRender("");
         document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
         document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
@@ -3911,105 +4063,112 @@ function pedidosOpenForm(existingIndex){
         }
       }
 
-      await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+      await pedidosLoad(); pedidosRefresh();
       return true;
     }
   });
 }
 
 document.getElementById("ped-add").addEventListener("click", ()=>pedidosOpenMultiForm());
-document.getElementById("ped-search").addEventListener("input", e=>pedidosRender(e.target.value));
-document.getElementById("ped-fornecedor-filter").addEventListener("change", ()=>pedidosRender(document.getElementById("ped-search").value));
-document.getElementById("ped-status-filter").addEventListener("change", ()=>pedidosRender(document.getElementById("ped-search").value));
-document.querySelectorAll("#ped-subtabs .subtab-btn").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    document.querySelectorAll("#ped-subtabs .subtab-btn").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    pedidosSubTab = btn.dataset.subtab;
-    pedidosRender(document.getElementById("ped-search").value);
+
+/* Liga os controles das duas abas que leem a tabela `pedidos` ("Pedidos" e
+   "Estoque"): busca, filtros, sub-abas e ações em lote são idênticos — muda
+   apenas o prefixo dos ids e o conjunto de pedidos de cada escopo. */
+PEDIDOS_SCOPES.forEach(({pfx, estoque})=>{
+  const state = pedidosScopeState[pfx];
+  const rerender = ()=>pedidosRender(pedSearchValue(pfx), pfx);
+
+  pedEl(pfx, "search").addEventListener("input", e=>pedidosRender(e.target.value, pfx));
+  pedEl(pfx, "fornecedor-filter").addEventListener("change", rerender);
+  pedEl(pfx, "status-filter").addEventListener("change", rerender);
+  document.querySelectorAll("#"+pfx+"-subtabs .subtab-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      document.querySelectorAll("#"+pfx+"-subtabs .subtab-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      state.subTab = btn.dataset.subtab;
+      rerender();
+    });
   });
-});
-document.getElementById("ped-select-all").addEventListener("change", (e)=>{
-  const fornFilter = document.getElementById("ped-fornecedor-filter").value;
-  const statusFilter = document.getElementById("ped-status-filter").value;
-  const searchTerm = document.getElementById("ped-search").value.trim().toLowerCase();
-  let rows = pedidosData.filter(p => pedidosRowSubTab(p) === pedidosSubTab);
-  if(fornFilter) rows = rows.filter(p => p.fornecedor === fornFilter);
-  if(statusFilter) rows = rows.filter(p => p.status === statusFilter);
-  if(searchTerm) rows = rows.filter(p => Object.values(p).join(" ").toLowerCase().includes(searchTerm));
-  if(e.target.checked) rows.forEach(p=>pedidosSelectedIds.add(p.id));
-  else rows.forEach(p=>pedidosSelectedIds.delete(p.id));
-  pedidosRender(document.getElementById("ped-search").value);
-});
-document.getElementById("ped-bulk-apply-status").addEventListener("click", async ()=>{
-  if(pedidosSelectedIds.size === 0) return;
-  const status = document.getElementById("ped-bulk-status").value;
-  if(!status){ showAppAlert("Selecione o novo status a aplicar."); return; }
-  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  if(status === "Enviado" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado". Os que tiverem Data de Envio preenchida serão consolidados por pedido (Nº Pedido + Licitante + Empenho) na aba Licitações. Continuar?`))) return;
-  if(status === "Selecionado pra compra" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão movidos para a aba Planejamento. Continuar?`))) return;
-  for(const p of selecionados){
-    const payload = { status };
-    if(status === "Comprado" || status === "Enviado" || status === "Selecionado pra compra") payload.comprado = true;
-    if(status === "À enviar") payload.comprado = false;
-    const { error } = await sb.from("pedidos").update(payload).eq("id", p.id);
-    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); continue; }
-  }
-  pedidosSelectedIds.clear();
-  document.getElementById("ped-bulk-status").value = "";
-  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
-  // Consolidação: uma sincronização por PEDIDO (não por item) após recarregar os dados
-  if(status === "Enviado"){
-    await pedidosSincronizarPedidosTocados(selecionados);
-    const semData = selecionados.filter(p => !p.dataEnvio).length;
-    if(semData > 0) showAppAlert(`${semData} item(ns) ficaram como "Enviado" sem Data de Envio e por isso não entraram no consolidado de Licitações. Preencha a Data de Envio para transferi-los.`);
-  }
-  if(status === "Enviado"){ await licLoad(); licPopulateFilters(); licRender(); licRenderKpis(); }
-  if(status === "Selecionado pra compra"){ await planLoad(); planRender(""); }
-});
-document.getElementById("ped-bulk-apply-data-compra").addEventListener("click", async ()=>{
-  if(pedidosSelectedIds.size === 0) return;
-  const data = document.getElementById("ped-bulk-data-compra").value;
-  if(!data){ showAppAlert("Selecione a Data da Compra a aplicar."); return; }
-  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  for(const p of selecionados){
-    const { error } = await sb.from("pedidos").update({data_compra:data}).eq("id", p.id);
-    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
-  }
-  document.getElementById("ped-bulk-data-compra").value = "";
-  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
-});
-document.getElementById("ped-bulk-apply-data-envio").addEventListener("click", async ()=>{
-  if(pedidosSelectedIds.size === 0) return;
-  const data = document.getElementById("ped-bulk-data-envio").value;
-  if(!data){ showAppAlert("Selecione a Data de Envio a aplicar."); return; }
-  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  for(const p of selecionados){
-    const { error } = await sb.from("pedidos").update({data_envio:data}).eq("id", p.id);
-    if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
-  }
-  document.getElementById("ped-bulk-data-envio").value = "";
-  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
-  // Preencher a Data de Envio pode tornar o pedido elegível para Licitações
-  await pedidosSincronizarPedidosTocados(selecionados);
-  licPopulateFilters(); licRender(); licRenderKpis();
-});
-document.getElementById("ped-bulk-delete").addEventListener("click", async ()=>{
-  if(pedidosSelectedIds.size === 0) return;
-  const selecionados = pedidosData.filter(p=>pedidosSelectedIds.has(p.id));
-  if(!(await showAppConfirm(`Excluir ${selecionados.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`))) return;
-  let bloqueados = 0;
-  for(const p of selecionados){
-    const res = await deleteRowById("pedidos", p.id);
-    if(!res.ok){
-      if(res.denied) bloqueados++;
-      else { console.error(res.error); showAppAlert("Erro ao excluir item: "+res.msg); }
-      continue;
+  pedEl(pfx, "select-all").addEventListener("change", (e)=>{
+    const rows = pedidosLinhasVisiveis(pfx, estoque, pedSearchValue(pfx));
+    if(e.target.checked) rows.forEach(p=>state.selectedIds.add(p.id));
+    else rows.forEach(p=>state.selectedIds.delete(p.id));
+    rerender();
+  });
+
+  pedEl(pfx, "bulk-apply-status").addEventListener("click", async ()=>{
+    if(state.selectedIds.size === 0) return;
+    const status = pedEl(pfx, "bulk-status").value;
+    if(!status){ showAppAlert("Selecione o novo status a aplicar."); return; }
+    const selecionados = pedidosData.filter(p=>state.selectedIds.has(p.id));
+    if(status === "Enviado" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão marcados como "Enviado". Os que tiverem Data de Envio preenchida serão consolidados por pedido (Nº Pedido + Licitante + Empenho) na aba Licitações. Continuar?`))) return;
+    if(status === "Selecionado pra compra" && !(await showAppConfirm(`${selecionados.length} pedido(s) selecionado(s) serão movidos para a aba Planejamento. Continuar?`))) return;
+    for(const p of selecionados){
+      const payload = { status };
+      if(status === "Comprado" || status === "Enviado" || status === "Selecionado pra compra") payload.comprado = true;
+      if(status === "À enviar") payload.comprado = false;
+      const { error } = await sb.from("pedidos").update(payload).eq("id", p.id);
+      if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); continue; }
     }
-    pedidosSelectedIds.delete(p.id);
-  }
-  if(bloqueados > 0) showAppAlert(`${bloqueados} pedido(s) não foram excluídos: seu perfil de acesso não permite excluir pedidos.`);
-  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+    state.selectedIds.clear();
+    pedEl(pfx, "bulk-status").value = "";
+    await pedidosLoad(); pedidosRefresh();
+    // Consolidação: uma sincronização por PEDIDO (não por item) após recarregar os dados
+    if(status === "Enviado"){
+      await pedidosSincronizarPedidosTocados(selecionados);
+      const semData = selecionados.filter(p => !p.dataEnvio).length;
+      if(semData > 0) showAppAlert(`${semData} item(ns) ficaram como "Enviado" sem Data de Envio e por isso não entraram no consolidado de Licitações. Preencha a Data de Envio para transferi-los.`);
+    }
+    if(status === "Enviado"){ await licLoad(); licPopulateFilters(); licRender(); licRenderKpis(); }
+    if(status === "Selecionado pra compra"){ await planLoad(); planRender(""); }
+  });
+
+  pedEl(pfx, "bulk-apply-data-compra").addEventListener("click", async ()=>{
+    if(state.selectedIds.size === 0) return;
+    const data = pedEl(pfx, "bulk-data-compra").value;
+    if(!data){ showAppAlert("Selecione a Data da Compra a aplicar."); return; }
+    const selecionados = pedidosData.filter(p=>state.selectedIds.has(p.id));
+    for(const p of selecionados){
+      const { error } = await sb.from("pedidos").update({data_compra:data}).eq("id", p.id);
+      if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
+    }
+    pedEl(pfx, "bulk-data-compra").value = "";
+    await pedidosLoad(); pedidosRefresh();
+  });
+
+  pedEl(pfx, "bulk-apply-data-envio").addEventListener("click", async ()=>{
+    if(state.selectedIds.size === 0) return;
+    const data = pedEl(pfx, "bulk-data-envio").value;
+    if(!data){ showAppAlert("Selecione a Data de Envio a aplicar."); return; }
+    const selecionados = pedidosData.filter(p=>state.selectedIds.has(p.id));
+    for(const p of selecionados){
+      const { error } = await sb.from("pedidos").update({data_envio:data}).eq("id", p.id);
+      if(error){ console.error(error); showAppAlert("Erro ao atualizar item: "+error.message); }
+    }
+    pedEl(pfx, "bulk-data-envio").value = "";
+    await pedidosLoad(); pedidosRefresh();
+    // Preencher a Data de Envio pode tornar o pedido elegível para Licitações
+    await pedidosSincronizarPedidosTocados(selecionados);
+    licPopulateFilters(); licRender(); licRenderKpis();
+  });
+
+  pedEl(pfx, "bulk-delete").addEventListener("click", async ()=>{
+    if(state.selectedIds.size === 0) return;
+    const selecionados = pedidosData.filter(p=>state.selectedIds.has(p.id));
+    if(!(await showAppConfirm(`Excluir ${selecionados.length} pedido(s) selecionado(s)? Esta ação não pode ser desfeita.`))) return;
+    let bloqueados = 0;
+    for(const p of selecionados){
+      const res = await deleteRowById("pedidos", p.id);
+      if(!res.ok){
+        if(res.denied) bloqueados++;
+        else { console.error(res.error); showAppAlert("Erro ao excluir item: "+res.msg); }
+        continue;
+      }
+      state.selectedIds.delete(p.id);
+    }
+    if(bloqueados > 0) showAppAlert(`${bloqueados} pedido(s) não foram excluídos: seu perfil de acesso não permite excluir pedidos.`);
+    await pedidosLoad(); pedidosRefresh();
+  });
 });
 
 /* ============ PLANEJAMENTO (fornecedor/produto/quantidade/valores) ============ */
@@ -4214,7 +4373,7 @@ function planOpenForm(existingIndex){
           planSelectedIds.delete(existing.id);
         }
         await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
-        await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+        await pedidosLoad(); pedidosRefresh();
         return true;
       }
 
@@ -4333,7 +4492,7 @@ document.getElementById("plan-bulk-move").addEventListener("click", async ()=>{
   }
   document.getElementById("plan-bulk-status").value = "";
   await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
-  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+  await pedidosLoad(); pedidosRefresh();
 });
 /* ---- Pedido de Compra (gerado a partir da seleção do Planejamento) ---- */
 function pcEsc(s){
@@ -4747,7 +4906,7 @@ async function initApp(){
 
     // 3) pedidos
     await pedidosLoad();
-    pedidosPopulateFilters(); pedidosRender(""); pedidosRenderKpis();
+    pedidosRefresh();
 
     // 4) planejamento (alimentado por pedidos "Selecionado pra compra")
     await planLoad();
