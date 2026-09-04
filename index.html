@@ -1552,6 +1552,45 @@ function wireBulkDelete(prefix, tableName, getFilteredRows, reloadAndRender){
   };
 }
 
+/* Renomear um cadastro precisa propagar o nome para as telas que guardam a cópia
+   do nome (pedidos.fornecedor_nome, planejamento.produto_nome, etc.). Sem isso o
+   registro antigo continuaria aparecendo com o nome velho nas outras telas. */
+async function updateCadastroById(tableName, id, payload, cascatas){
+  const { data, error } = await sb.from(tableName).update(payload).eq("id", id).select("id");
+  if(error) return { ok:false, msg:"Erro ao salvar: "+error.message };
+  if(!data || data.length === 0){
+    return { ok:false, msg:"Nada foi alterado: seu perfil de acesso não permite editar registros nesta tela." };
+  }
+  for(const c of (cascatas||[])){
+    const { error: errCascata } = await sb.from(c.table).update({[c.col]: payload.nome}).eq(c.fk, id);
+    if(errCascata) console.error("Falha ao propagar o novo nome em "+c.table, errCascata);
+  }
+  return { ok:true };
+}
+// Recarrega as telas que exibem o nome copiado, para a mudança aparecer sem dar F5
+async function reloadTelasDependentes(){
+  await licLoad(); licPopulateFilters(); licRender(); licRenderKpis();
+  await pedidosLoad(); pedidosPopulateFilters(); pedidosRender(document.getElementById("ped-search").value); pedidosRenderKpis();
+  await planLoad(); planPopulateFornecedorFilter(); planRender(document.getElementById("plan-search").value);
+  await contasLoad(); contasRender(document.getElementById("contas-search").value); renderContasKpis(); checkContasAlerts();
+}
+function makeEditBtn(onClick){
+  const btn = document.createElement("button");
+  btn.className = "icon-btn";
+  btn.type = "button";
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>Editar`;
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+function makeDelBtn(onClick){
+  const btn = document.createElement("button");
+  btn.className = "icon-btn";
+  btn.type = "button";
+  btn.innerHTML = iconTrash + "Excluir";
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
 /* ============ CLIENTES (cadastro) ============ */
 let clientesData = [];
 async function clientesLoad(){
@@ -1588,17 +1627,15 @@ function clientesRender(searchTerm){
       tdChk.appendChild(chk);
       const tdNome = document.createElement("td"); tdNome.textContent = c.nome;
       const tdAcao = document.createElement("td");
-      const delBtn = document.createElement("button");
-      delBtn.className = "icon-btn";
-      delBtn.innerHTML = iconTrash + "Excluir";
-      delBtn.addEventListener("click", async ()=>{
+      const editBtn = makeEditBtn(()=>editClienteQuick(c));
+      const delBtn = makeDelBtn(async ()=>{
         if(await showAppConfirm("Excluir este cliente?")){
           const res = await deleteRowById("clientes", c.id);
           if(!res.ok){ showAppAlert(res.msg); return; }
-          await clientesLoad(); clientesRender(""); clientesRenderKpis(); refreshClientDatalist();
+          await clientesReloadAndRender();
         }
       });
-      tdAcao.appendChild(delBtn);
+      tdAcao.append(editBtn, delBtn);
       tr.append(tdChk, tdNome, tdAcao);
       tbody.appendChild(tr);
     });
@@ -1637,11 +1674,39 @@ function addClienteQuick(prefillName, onCreated){
     }
   });
 }
+function editClienteQuick(cliente){
+  openQuickModal({
+    title: "Editar Cliente",
+    icon: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>`,
+    fields: [
+      {key:"nome", label:"Nome de Cadastro", type:"text", full:true, value:cliente.nome || ""},
+    ],
+    onSave: async (values)=>{
+      const nome = values.nome.trim();
+      if(!nome){ showAppAlert("Informe o nome do cliente."); return false; }
+      const res = await updateCadastroById("clientes", cliente.id, {nome}, [
+        {table:"licitacoes", fk:"cliente_id", col:"cliente_nome"},
+        {table:"pedidos", fk:"licitante_id", col:"licitante_nome"},
+        {table:"planejamento", fk:"licitante_id", col:"licitante_nome"},
+      ]);
+      if(!res.ok){ showAppAlert(res.msg); return false; }
+      await clientesReloadAndRender();
+      await reloadTelasDependentes();
+      return true;
+    }
+  });
+}
+async function clientesReloadAndRender(){
+  await clientesLoad();
+  clientesRender(document.getElementById("clientes-search").value);
+  clientesRenderKpis();
+  refreshClientDatalist();
+}
 document.getElementById("clientes-add").addEventListener("click", ()=>addClienteQuick(""));
 const clientesBulk = wireBulkDelete("clientes", "clientes", ()=>{
   const s = document.getElementById("clientes-search").value.trim().toLowerCase();
   return s ? clientesData.filter(c=>c.nome.toLowerCase().includes(s)) : clientesData;
-}, async ()=>{ await clientesLoad(); clientesRender(document.getElementById("clientes-search").value); clientesRenderKpis(); refreshClientDatalist(); });
+}, clientesReloadAndRender);
 document.getElementById("clientes-search").addEventListener("input", e=>clientesRender(e.target.value));
 
 /* ============ FORNECEDORES (cadastro) ============ */
@@ -1680,17 +1745,15 @@ function fornecedoresRender(searchTerm){
       tdChk.appendChild(chk);
       const tdNome = document.createElement("td"); tdNome.textContent = f.nome;
       const tdAcao = document.createElement("td");
-      const delBtn = document.createElement("button");
-      delBtn.className = "icon-btn";
-      delBtn.innerHTML = iconTrash + "Excluir";
-      delBtn.addEventListener("click", async ()=>{
+      const editBtn = makeEditBtn(()=>editFornecedorQuick(f));
+      const delBtn = makeDelBtn(async ()=>{
         if(await showAppConfirm("Excluir este fornecedor?")){
           const res = await deleteRowById("fornecedores", f.id);
           if(!res.ok){ showAppAlert(res.msg); return; }
-          await fornecedoresLoad(); fornecedoresRender(""); fornecedoresRenderKpis(); refreshFornecedorDatalist();
+          await fornecedoresReloadAndRender();
         }
       });
-      tdAcao.appendChild(delBtn);
+      tdAcao.append(editBtn, delBtn);
       tr.append(tdChk, tdNome, tdAcao);
       tbody.appendChild(tr);
     });
@@ -1729,11 +1792,39 @@ function addFornecedorQuick(prefillName, onCreated){
     }
   });
 }
+function editFornecedorQuick(fornecedor){
+  openQuickModal({
+    title: "Editar Fornecedor",
+    icon: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>`,
+    fields: [
+      {key:"nome", label:"Nome do Fornecedor", type:"text", full:true, value:fornecedor.nome || ""},
+    ],
+    onSave: async (values)=>{
+      const nome = values.nome.trim();
+      if(!nome){ showAppAlert("Informe o nome do fornecedor."); return false; }
+      const res = await updateCadastroById("fornecedores", fornecedor.id, {nome}, [
+        {table:"pedidos", fk:"fornecedor_id", col:"fornecedor_nome"},
+        {table:"planejamento", fk:"fornecedor_id", col:"fornecedor_nome"},
+        {table:"contas_pagar", fk:"fornecedor_id", col:"fornecedor_nome"},
+      ]);
+      if(!res.ok){ showAppAlert(res.msg); return false; }
+      await fornecedoresReloadAndRender();
+      await reloadTelasDependentes();
+      return true;
+    }
+  });
+}
+async function fornecedoresReloadAndRender(){
+  await fornecedoresLoad();
+  fornecedoresRender(document.getElementById("fornecedores-search").value);
+  fornecedoresRenderKpis();
+  refreshFornecedorDatalist();
+}
 document.getElementById("fornecedores-add").addEventListener("click", ()=>addFornecedorQuick(""));
 const fornecedoresBulk = wireBulkDelete("fornecedores", "fornecedores", ()=>{
   const s = document.getElementById("fornecedores-search").value.trim().toLowerCase();
   return s ? fornecedoresData.filter(f=>f.nome.toLowerCase().includes(s)) : fornecedoresData;
-}, async ()=>{ await fornecedoresLoad(); fornecedoresRender(document.getElementById("fornecedores-search").value); fornecedoresRenderKpis(); refreshFornecedorDatalist(); });
+}, fornecedoresReloadAndRender);
 document.getElementById("fornecedores-search").addEventListener("input", e=>fornecedoresRender(e.target.value));
 
 /* ============ PRODUTOS (cadastro) ============ */
@@ -1773,17 +1864,15 @@ function produtosRender(searchTerm){
       const tdNome = document.createElement("td"); tdNome.textContent = p.nome;
       const tdObs = document.createElement("td"); tdObs.textContent = p.observacao || "";
       const tdAcao = document.createElement("td");
-      const delBtn = document.createElement("button");
-      delBtn.className = "icon-btn";
-      delBtn.innerHTML = iconTrash + "Excluir";
-      delBtn.addEventListener("click", async ()=>{
+      const editBtn = makeEditBtn(()=>editProdutoQuick(p));
+      const delBtn = makeDelBtn(async ()=>{
         if(await showAppConfirm("Excluir este produto?")){
           const res = await deleteRowById("produtos", p.id);
           if(!res.ok){ showAppAlert(res.msg); return; }
-          await produtosLoad(); produtosRender(""); produtosRenderKpis(); refreshProdutoDatalist();
+          await produtosReloadAndRender();
         }
       });
-      tdAcao.appendChild(delBtn);
+      tdAcao.append(editBtn, delBtn);
       tr.append(tdChk, tdNome, tdObs, tdAcao);
       tbody.appendChild(tr);
     });
@@ -1826,11 +1915,39 @@ function addProdutoQuick(prefillName, onCreated){
     }
   });
 }
+function editProdutoQuick(produto){
+  openQuickModal({
+    title: "Editar Produto",
+    icon: `<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>`,
+    fields: [
+      {key:"nome", label:"Nome do Produto", type:"text", full:true, value:produto.nome || ""},
+      {key:"observacao", label:"Observação", type:"textarea", full:true, value:produto.observacao || ""},
+    ],
+    onSave: async (values)=>{
+      const nome = values.nome.trim();
+      if(!nome){ showAppAlert("Informe o nome do produto."); return false; }
+      const res = await updateCadastroById("produtos", produto.id, {nome, observacao:values.observacao.trim()}, [
+        {table:"pedidos", fk:"produto_id", col:"material"},
+        {table:"planejamento", fk:"produto_id", col:"produto_nome"},
+      ]);
+      if(!res.ok){ showAppAlert(res.msg); return false; }
+      await produtosReloadAndRender();
+      await reloadTelasDependentes();
+      return true;
+    }
+  });
+}
+async function produtosReloadAndRender(){
+  await produtosLoad();
+  produtosRender(document.getElementById("produtos-search").value);
+  produtosRenderKpis();
+  refreshProdutoDatalist();
+}
 document.getElementById("produtos-add").addEventListener("click", ()=>addProdutoQuick(""));
 const produtosBulk = wireBulkDelete("produtos", "produtos", ()=>{
   const s = document.getElementById("produtos-search").value.trim().toLowerCase();
   return s ? produtosData.filter(p=>p.nome.toLowerCase().includes(s)) : produtosData;
-}, async ()=>{ await produtosLoad(); produtosRender(document.getElementById("produtos-search").value); produtosRenderKpis(); refreshProdutoDatalist(); });
+}, produtosReloadAndRender);
 document.getElementById("produtos-search").addEventListener("input", e=>produtosRender(e.target.value));
 
 /* ============ MODAL DE AVISO/ERRO (substitui showAppAlert() nativo) ============ */
