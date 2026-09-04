@@ -806,7 +806,7 @@
     <div class="toolbar">
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" id="lic-search" placeholder="Buscar por cliente, empenho, NF...">
+        <input type="text" id="lic-search" placeholder="Buscar por cliente, empenho, NF... (separe por vírgula para buscar várias)">
       </div>
       <select id="lic-month-filter"><option value="">Todos os meses (Pagamento)</option></select>
       <button class="btn secondary" id="lic-add">
@@ -2440,12 +2440,17 @@ function licUpdateSubtabCounts(){
   document.getElementById("lic-count-atraso").textContent = licData.filter(r=>statusClass(r["Status de PGTO"])==="atraso").length;
 }
 function licFilteredSorted(){
-  const search = document.getElementById("lic-search").value.trim().toLowerCase();
+  // aceita vários termos separados por vírgula, ponto-e-vírgula ou quebra de linha (busca OU)
+  const terms = document.getElementById("lic-search").value.toLowerCase()
+    .split(/[,;\n]+/).map(t=>t.trim()).filter(Boolean);
   const month = document.getElementById("lic-month-filter").value;
   let rows = licData.filter(r=>{
     if(licSubTab && statusClass(r["Status de PGTO"]) !== licSubTab) return false;
     if(month && !(r["Data de Pagamento"] && r["Data de Pagamento"].startsWith(month))) return false;
-    if(search && !Object.values(r).join(" ").toLowerCase().includes(search)) return false;
+    if(terms.length){
+      const hay = Object.values(r).join(" ").toLowerCase();
+      if(!terms.some(t=>hay.includes(t))) return false;
+    }
     return true;
   });
   if(licSort.key){
