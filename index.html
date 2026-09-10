@@ -3543,11 +3543,25 @@ function pedidosRenderKpis(){
   const totalCompra = pedidosData.reduce((a,p)=>a+(parseFloat(p.valorTotalCompra)||0),0);
   const totalVenda = pedidosData.reduce((a,p)=>a+(parseFloat(p.valorTotalVenda)||0),0);
   const totalLucro = pedidosData.reduce((a,p)=>a+(parseFloat(p.lucroBruto)||0),0);
+  // Totais segmentados por status: "Selecionado pra compra"/"Enviado" x "À enviar"
+  const somaPor = (statuses, campo) => pedidosData
+    .filter(p=>statuses.includes(p.status))
+    .reduce((a,p)=>a+(parseFloat(p[campo])||0),0);
+  const selEnv = ["Selecionado pra compra","Enviado"];
+  const aEnv = ["À enviar"];
+  const vendaSelEnv = somaPor(selEnv, "valorTotalVenda");
+  const compraSelEnv = somaPor(selEnv, "valorTotalCompra");
+  const vendaAEnviar = somaPor(aEnv, "valorTotalVenda");
+  const compraAEnviar = somaPor(aEnv, "valorTotalCompra");
   document.getElementById("ped-kpis").innerHTML = `
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></div><div><div class="label">Pedidos</div><div class="value">${pedidosData.length}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/></svg></div><div><div class="label">Valor Total Compra</div><div class="value">${fmtCurrency(totalCompra)}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="label">Valor Total Venda</div><div class="value">${fmtCurrency(totalVenda)}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.5 8.5-5-5L2 17"/></svg></div><div><div class="label">Lucro Bruto Total</div><div class="value ${totalLucro<0?'neg':'pos'}">${fmtCurrency(totalLucro)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="label">Venda (Selec. p/ Compra + Enviado)</div><div class="value">${fmtCurrency(vendaSelEnv)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/></svg></div><div><div class="label">Compra (Selec. p/ Compra + Enviado)</div><div class="value">${fmtCurrency(compraSelEnv)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="label">Venda (À enviar)</div><div class="value">${fmtCurrency(vendaAEnviar)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/></svg></div><div><div class="label">Compra (À enviar)</div><div class="value">${fmtCurrency(compraAEnviar)}</div></div></div>
   `;
 }
 
