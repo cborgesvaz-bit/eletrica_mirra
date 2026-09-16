@@ -4850,12 +4850,20 @@ function contasOpenForm(id){
 }
 function renderContasKpis(){
   const items = contasData;
-  const total = items.reduce((a,i)=>a+(parseFloat(i.valor)||0)+(parseFloat(i.juros)||0),0);
+  const valorComJuros = i=>(parseFloat(i.valor)||0)+(parseFloat(i.juros)||0);
+  const todayISO = new Date().toISOString().slice(0,10);
+  const isPaga = i=>(i.status||"").toLowerCase().includes("pago");
+  const isAtrasada = i=>!isPaga(i) && ((i.status||"").toLowerCase().includes("atras") || (i.vencimento && i.vencimento < todayISO));
+  const totalAPagar = items.filter(i=>!isPaga(i) && !isAtrasada(i)).reduce((a,i)=>a+valorComJuros(i),0);
+  const totalAtrasado = items.filter(isAtrasada).reduce((a,i)=>a+valorComJuros(i),0);
+  const totalPago = items.filter(isPaga).reduce((a,i)=>a+valorComJuros(i),0);
   const pendentes = items.filter(i=>(i.status||"").toLowerCase().includes("pend")).length;
   const pagas = items.filter(i=>(i.status||"").toLowerCase().includes("pago")).length;
   document.getElementById("contas-kpis").innerHTML = `
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></div><div><div class="label">Total de Contas</div><div class="value">${items.length}</div></div></div>
-    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="label">Valor Total (c/ juros)</div><div class="value">${fmtCurrency(total)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="label">Valor Total a Pagar (c/ juros)</div><div class="value">${fmtCurrency(totalAPagar)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg></div><div><div class="label">Valor Total Atrasado (c/ juros)</div><div class="value neg">${fmtCurrency(totalAtrasado)}</div></div></div>
+    <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div><div><div class="label">Valor Total Pago (c/ juros)</div><div class="value pos">${fmtCurrency(totalPago)}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div><div><div class="label">Pendentes</div><div class="value">${pendentes}</div></div></div>
     <div class="kpi"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div><div><div class="value pos">${pagas}</div><div class="label">Pagas</div></div></div>
   `;
