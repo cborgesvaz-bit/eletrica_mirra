@@ -2546,6 +2546,8 @@ function licFromDbRow(dbRow){
     const dbKey = LIC_COLUMN_DB_MAP[col.key];
     row[col.key] = dbRow[dbKey] ?? "";
   });
+  // versão do registro no banco: usada para detectar edição concorrente ao salvar
+  row._updated_at = dbRow.updated_at ?? null;
   return row;
 }
 async function licLoad(){
@@ -2833,8 +2835,20 @@ function licCompute(values){
   }
   return {imposto, caixaAdm: caixaAdmAuto, lucro, pct, cra, cbva, rlv, lbv, dataPrev};
 }
-function licOpenForm(existingIndex){
-  const existing = existingIndex !== undefined && existingIndex !== null ? licData[existingIndex] : null;
+async function licOpenForm(existingIndex){
+  let existing = existingIndex !== undefined && existingIndex !== null ? licData[existingIndex] : null;
+  if(existing){
+    // recarrega o registro do banco: licData pode estar desatualizado se outro
+    // computador editou a nota depois que esta tela foi carregada
+    const { data: fresh, error: freshErr } = await sb.from("licitacoes").select("*").eq("id", existing.id).maybeSingle();
+    if(freshErr){ console.error(freshErr); }
+    else if(!fresh){ showAppAlert("Este registro não existe mais no banco (pode ter sido excluído em outro computador)."); await licLoad(); licPopulateFilters(); licRender(); licRenderKpis(); return; }
+    else {
+      existing = licFromDbRow(fresh);
+      licData[existingIndex] = existing;
+      licRender(); licRenderKpis();
+    }
+  }
   const c0 = licCompute(existing || {});
   const fields = [];
   LIC_COLUMNS.forEach(col=>{
@@ -2920,6 +2934,20 @@ function licOpenForm(existingIndex){
       row["Lucro - CBVA"] = cFinal.cbva;
       row["Lucro - RLV"] = cFinal.rlv;
       row["Lucro LBV"] = cFinal.lbv;
+      if(existing){
+        // detecta se outra pessoa salvou o registro enquanto este formulário estava aberto
+        const { data: atual, error: verErr } = await sb.from("licitacoes").select("updated_at").eq("id", existing.id).maybeSingle();
+        if(verErr){ console.error(verErr); }
+        else if(!atual){ showAppAlert("Este registro foi excluído em outro computador e não pode ser salvo."); return false; }
+        else if(existing._updated_at && atual.updated_at && atual.updated_at !== existing._updated_at){
+          const quando = new Date(atual.updated_at).toLocaleString("pt-BR");
+          const sobrescrever = await showAppConfirm(
+            `Este registro foi alterado em outro computador (${quando}) depois que você abriu o formulário. Salvar agora vai sobrescrever essas alterações. Para ver a versão atual, cancele, feche o formulário e abra o registro novamente.`,
+            {title:"Registro alterado por outra pessoa", okLabel:"Sobrescrever", cancelLabel:"Cancelar"}
+          );
+          if(!sobrescrever) return false;
+        }
+      }
       const payload = licToDbPayload(row);
       let error, data;
       if(existing){
