@@ -2244,6 +2244,18 @@ modalBody.addEventListener("input", (e)=>{
 });
 const quickAddHandlers = { cliente: addClienteQuick, fornecedor: addFornecedorQuick, produto: addProdutoQuick };
 
+function modalFmtMoney(n){
+  return n.toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
+}
+// Campos "currency" exibem "R$ 1.234,56" mas devolvem "1234.56" para o parseFloat dos onSave
+function modalFieldValue(f, el){
+  if(f.type === "checkbox") return el.checked;
+  if(f.type === "currency"){
+    const digits = el.value.replace(/\D/g, "");
+    return digits ? String(parseInt(digits, 10) / 100) : "";
+  }
+  return el.value;
+}
 function openModal({title, icon, fields, onSave, onInput}){
   modalTitle.textContent = title;
   modalTitleWrap.querySelector("svg").outerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon||'<path d="M12 5v14M5 12h14"/>'}</svg>`;
@@ -2275,10 +2287,22 @@ function openModal({title, icon, fields, onSave, onInput}){
       input.type = (f.type === "date" || f.type === "number") ? f.type : "text";
       if(f.type === "number" && f.step) input.step = f.step;
       input.placeholder = f.placeholder || "";
+      if(f.type === "currency"){
+        // Máscara de moeda: digita só números, preenche da direita (centavos)
+        input.inputMode = "numeric";
+        input.addEventListener("input", ()=>{
+          const digits = input.value.replace(/\D/g, "");
+          input.value = digits ? modalFmtMoney(parseInt(digits, 10) / 100) : "";
+        });
+      }
     }
     input.id = "modal-field-"+f.key;
     input.dataset.key = f.key;
-    if(f.value !== undefined && f.type !== "checkbox") input.value = f.value;
+    if(f.value !== undefined && f.type !== "checkbox"){
+      input.value = f.type === "currency"
+        ? (f.value === "" || f.value === null ? "" : modalFmtMoney(parseFloat(f.value) || 0))
+        : f.value;
+    }
     if(f.readonly){
       input.readOnly = true;
       input.tabIndex = -1;
@@ -2341,7 +2365,7 @@ function openModal({title, icon, fields, onSave, onInput}){
     const values = {};
     fields.forEach(f=>{
       const el = document.getElementById("modal-field-"+f.key);
-      values[f.key] = f.type === "checkbox" ? el.checked : el.value;
+      values[f.key] = modalFieldValue(f, el);
     });
     const saveBtn = document.getElementById("modal-save-btn");
     saveBtn.disabled = true; saveBtn.style.opacity = "0.6";
@@ -2359,7 +2383,7 @@ function openModal({title, icon, fields, onSave, onInput}){
   if(modalOnInput){
     const getValues = ()=>{
       const v = {};
-      fields.forEach(f=>{ const el = document.getElementById("modal-field-"+f.key); if(el) v[f.key] = f.type === "checkbox" ? el.checked : el.value; });
+      fields.forEach(f=>{ const el = document.getElementById("modal-field-"+f.key); if(el) v[f.key] = modalFieldValue(f, el); });
       return v;
     };
     const setDisplay = (key,val)=>{
@@ -4367,8 +4391,8 @@ function planOpenForm(existingIndex){
     {key:"fornecedor", label:"Fornecedor", type:"text", datalist:"fornecedores-datalist", quickAdd:"fornecedor", full:true, value: existing?.fornecedor || ""},
     {key:"produto", label:"Produto", type:"text", datalist:"produtos-datalist", quickAdd:"produto", full:true, value: existing?.produto || ""},
     {key:"quantidade", label:"Quantidade", type:"number", step:"0.01", value: existing?.quantidade ?? ""},
-    {key:"precoCompra", label:"Preço de Compra (R$)", type:"number", step:"0.01", value: existing?.precoCompra ?? ""},
-    {key:"precoUnitario", label:"Preço Unitário (R$)", type:"number", step:"0.01", value: existing?.precoUnitario ?? ""},
+    {key:"precoCompra", label:"Preço de Compra (R$)", type:"currency", value: existing?.precoCompra ?? ""},
+    {key:"precoUnitario", label:"Preço Unitário (R$)", type:"currency", value: existing?.precoUnitario ?? ""},
     {key:"valorTotal_display", label:"Valor Total", type:"text", readonly:true, value: fmtCurrency(existing ? (existing.valorTotal||0) : c0.valorTotal)},
     {key:"statusPedido", label:"Status (devolver para Pedidos)", type:"select", full:true,
       options:["Manter em Planejamento","À enviar","Comprado","Enviado"], value:"Manter em Planejamento"},
