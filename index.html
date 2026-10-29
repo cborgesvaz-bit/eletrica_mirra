@@ -2593,11 +2593,12 @@ async function licLoad(){
   licSelectedIds = new Set([...licSelectedIds].filter(id=>licData.some(r=>r.id===id)));
 }
 async function licApplyAtrasoAutomation(){
-  // Se a Data de Pagamento já passou e o status ainda não é "Recebido", o registro
-  // deve automaticamente virar "Atraso" e ser exibido na sub-aba correspondente.
-  const hojeStr = new Date().toISOString().substring(0,10);
+  // Se a Data de Pagamento (ou, sem ela, a Data Prevista de Pagamento) já passou e o
+  // status ainda não é "Recebido", o registro vira "Atraso" e vai para a sub-aba correspondente.
+  const hoje = new Date();
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
   const paraAtualizar = licData.filter(r=>{
-    const dp = r["Data de Pagamento"];
+    const dp = r["Data de Pagamento"] || r["Data Prevista de Pagamento"];
     if(!dp) return false;
     if(statusClass(r["Status de PGTO"]) === "recebido") return false;
     if(statusClass(r["Status de PGTO"]) === "atraso") return false;
