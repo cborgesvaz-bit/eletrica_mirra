@@ -4813,6 +4813,18 @@ async function contasLoad(){
   const { data, error } = await sb.from("contas_pagar").select("*").order("vencimento", {ascending:true, nullsFirst:false});
   if(error){ console.error(error); contasData = []; return; }
   contasData = (data || []).map(contasFromDbRow);
+  await contasApplyAtrasoAutomation();
+}
+async function contasApplyAtrasoAutomation(){
+  // Boleto "Pendente" com vencimento já passado vira "Atrasado" e vai para a sub-aba correspondente.
+  const hoje = new Date();
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
+  const paraAtualizar = contasData.filter(c=>c.status === "Pendente" && c.vencimento && c.vencimento < hojeStr);
+  for(const c of paraAtualizar){
+    const { error } = await sb.from("contas_pagar").update({status:"Atrasado"}).eq("id", c.id);
+    if(error){ console.error(error); continue; }
+    c.status = "Atrasado";
+  }
 }
 function contasRender(searchTerm){
   const tbody = document.getElementById("contas-body");
